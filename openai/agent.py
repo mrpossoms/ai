@@ -10,7 +10,7 @@ RANDOMIZATION = 2
 
 DESC_SHAPE = (8, 4)
 
-def rnd_white(base=None, mag=1):
+def rnd_white(base=None, mag=1, std_dev=None):
 	matrix = (np.random.random(DESC_SHAPE) * 2 - 1) * mag
 
 	if base is not None:
@@ -18,8 +18,8 @@ def rnd_white(base=None, mag=1):
 
 	return matrix
 
-def rnd_gaussian(base=None, mag=1, std_dev=0.25):
-	matrix = (np.random.normal(0, std_dev, DESC_SHAPE) * 2 - 1) * mag
+def rnd_gaussian(base=None, mag=1, std_dev=1):
+	matrix = np.random.normal(0, std_dev, DESC_SHAPE) * mag
 
 	if base is not None:
 		matrix = matrix + base
@@ -65,12 +65,12 @@ class Agent:
 			desc_matrix = self.best_candidate
 
 		self.environment.reset()
-		observation, reward, done, info = self.environment.step(0)			
+		observation, reward, done, info = self.environment.step(0)
 
 		for _ in range(600):
 			observation = np.array(observation)
 			action_probs = observation.dot(desc_matrix)
-			
+
 			if show:
 				self.environment.render()
 			observation, reward, done, info = self.environment.step(np.argmax(action_probs))
@@ -123,5 +123,5 @@ class Agent:
 
 			self.gen_candidates(base=best_matrices, std_dev = 10. / max(self.improvement_rate, 1))
 			self.best_candidate = best_matrices.pop()
-	
+
 			np.savetxt(fname='params.txt', X=self.best_candidate, delimiter=',')
