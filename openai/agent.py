@@ -147,7 +147,6 @@ class Agent:
             if self.improvement_rate < 0:
                 print("!!!Regression!!!")
                 sliding_std_dev = 1
-                exit()
 
             best_matrices = [ ] + last_best_candidates
             for candidate in best_candidates: best_matrices += [candidate[0]]
@@ -159,8 +158,8 @@ class Agent:
 
             with open("learning.csv", mode="a+") as history:
                 matrix_elements = ""
-                reshaped = self.best_candidate.reshape(self.best_candidate.size)
+                reshaped = best_best[0].reshape(best_best[0].size)
                 for element in reshaped:
                     matrix_elements += str(element) + ','
 
-                history.write(matrix_elements + "\n")
+                history.write(matrix_elements + str(best_best[1]) + "\n")
