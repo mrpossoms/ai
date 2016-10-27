@@ -3,11 +3,12 @@ from agent import Agent
 from getopt import getopt
 import sys
 
-env = gym.make('LunarLander-v2')
-agent = Agent(env, target=200)
+just_show = '--just-show' in sys.argv
 
-if not '--just-show' in sys.argv:
-	print("Solving")
+env = gym.make('LunarLander-v2')
+agent = Agent(env, target=200, reset=not just_show)
+
+if not just_show:
 	agent.solve()
 
 agent.run_epoch(show=True, candidate=agent.best_candidate)

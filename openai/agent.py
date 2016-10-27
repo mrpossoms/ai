@@ -26,7 +26,7 @@ def rnd_gaussian(base, scale=1, std_dev=1):
 
 
 class Agent:
-    def __init__(self, env, target):
+    def __init__(self, env, target, reset=True):
         self.environment = env
         self.improvement_rate = 0
         self.target = target
@@ -40,10 +40,11 @@ class Agent:
         self.shape = (rows, columns)
         self.best_candidate = np.random.random(self.shape)
 
-        try:
-            os.unlink("learning.csv")
-        except:
-            pass
+        if reset:
+            try:
+                os.unlink("learning.csv")
+            except:
+                pass
 
         try:
             self.best_candidate = np.loadtxt(fname='params.txt', delimiter=",")
@@ -168,4 +169,4 @@ class Agent:
                 #     matrix_elements += str(element) + ','
 
                 history.write(
-                    "{0},{1},{2}\n".format(str(best_score), str(self.improvement_rate), str(self.learning_rate)))
+                    "{0},{1},{2},{3}\n".format(str(best_score), str(avg_score), str(self.improvement_rate), str(self.learning_rate)))
