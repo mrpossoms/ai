@@ -1,4 +1,3 @@
-#!/usr/bin/python
 import gym
 import numpy as np
 import trainer
@@ -24,8 +23,14 @@ class CartTrainer(trainer.Trainer):
         start = last = env.reset()
 
         for _ in range(200):
-            action = np.argmax(np.array(last).dot(candidate))
+            action = (np.array(last).dot(candidate))[0]
+            if action > 0.5:
+                action = 1
+            else:
+                action = 0
+
             obs, reward, done, info = env.step(action)
+            last = obs
             total_score += reward
 
             if show:
@@ -41,5 +46,7 @@ cart_agent = trainer.Subject(env.reset(), path="cart_params.txt")
 
 trainer = CartTrainer()
 
-trainer.train(100, cart_agent)
+trainer.train(100, cart_agent, target_score=200)
+cart_agent.save()
+
 trainer.evaluate(cart_agent.soln, env, show=True)
