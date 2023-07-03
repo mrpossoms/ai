@@ -1,0 +1,11 @@
+location: gitman_sources
+sources:
+- name: asciichart
+  type: git
+  repo: https://github.com/Civitasv/asciichart.git
+  sparse_paths:
+  -
+  rev: master
+  link:
+  scripts:
+  -
