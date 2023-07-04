@@ -8,11 +8,15 @@
 #include <math.h>
 
 #include "spare-time/tg.h"
+#include "structs.hpp"
+#include "net.hpp"
+#include "rl.hpp"
 
 int TG_TIMEOUT = 100000;
 
 struct {
 	float position[2];
+	float speed = 0;
 	float front[2];
 	float heading;
 	float goal[2];
@@ -77,11 +81,13 @@ static inline const char* sampler(int row, int col)
 {
 	if (row == round(ENV.front[0]) && col == round(ENV.front[1]))
 	{
-		auto i = static_cast<unsigned>(round(8 * ENV.heading / (M_PI * 2))) % 8;
-		static char out[2];
-		out[0] = "-\\|/-\\|/"[i];
-		return out;
+		// auto i = static_cast<unsigned>(round(8 * ENV.heading / (M_PI * 2))) % 8;
+		// static char out[2];
+		// out[0] = "-\\|/-\\|/"[i];
+		return ".";
 	}
+
+
 
 	if (row == round(ENV.goal[0]) && col == round(ENV.goal[1]))
 	{
@@ -94,7 +100,7 @@ static inline const char* sampler(int row, int col)
 	}
 
 	// return character for a given row and column in the terminal
-	return ".";
+	return " ";
 }
 
 void spawn_goal()
@@ -110,12 +116,37 @@ int playing()
 	return 1;
 }
 
+float distance()
+{
+	auto dx = ENV.goal[0] - ENV.position[0];
+	auto dy = ENV.goal[1] - ENV.position[1];
+	return sqrt(dx*dx + dy*dy);
+}
+
+state get_state()
+{
+	auto dx = ENV.goal[0] - ENV.position[0];
+	auto dy = ENV.goal[1] - ENV.position[1];
+	return {
+		{dx, dy},
+		{sin(ENV.heading),cos(ENV.heading)}
+	};
+}
 
 void update()
 {
-	// do game logic, update game state
+	auto d_t_1 = distance();
 	ENV.front[0] = 1 * sin(ENV.heading) + ENV.position[0];
 	ENV.front[1] = 1 * cos(ENV.heading) + ENV.position[1];
+	ENV.position[0] += (ENV.front[0] - ENV.position[0]) * ENV.speed;
+	ENV.position[1] += (ENV.front[1] - ENV.position[1]) * ENV.speed;
+	auto d_t = distance();
+
+	auto reward_t = d_t - d_t_1;
+
+	auto a = net::act(get_state());
+	ENV.heading += a.d_heading;
+	ENV.speed = std::max(0.5f, std::min(-0.5f, a.d_pos));
 }
 
 
@@ -132,6 +163,8 @@ int main(int argc, char* argv[])
 
 	term.max_rows = 40;
 	term.max_cols = 80;
+
+	net::init(4, 2);
 
 	spawn_goal();
 
