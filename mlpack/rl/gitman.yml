@@ -1,0 +1,11 @@
+location: gitman_sources
+sources:
+- name: spare-time 
+  type: git
+  repo: https://github.com/mrpossoms/spare-time.git
+  sparse_paths:
+  -
+  rev: master
+  link:
+  scripts:
+  -
