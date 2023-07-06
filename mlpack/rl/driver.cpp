@@ -8,19 +8,18 @@
 #include <math.h>
 
 #include "spare-time/tg.h"
-#include "structs.hpp"
 #include "net.hpp"
 #include "rl.hpp"
 
-int TG_TIMEOUT = 100000;
+int TG_TIMEOUT = 10000;
 
 struct {
 	float position[2];
-	float speed = 0;
-	float front[2];
-	float heading;
+	float vel[2];
 	float goal[2];
 } ENV;
+
+RL::ReplayBuffer replay_buffer(1);
 
 struct {
 	int max_rows, max_cols;
@@ -57,18 +56,16 @@ void input_hndlr()
 	switch(c)
 	{ // handle key accordingly
 		case 'i':
-			ENV.position[0] += ENV.front[0] - ENV.position[0];
-			ENV.position[1] += ENV.front[1] - ENV.position[1];
+			ENV.vel[0] -= 0.5f;
 			break;
 		case 'k':
-			ENV.position[0] -= ENV.front[0] - ENV.position[0];
-			ENV.position[1] -= ENV.front[1] - ENV.position[1];
+			ENV.vel[0] += 0.5f;
 			break;
 		case 'j':
-			ENV.heading -= M_PI / 4;
+			ENV.vel[1] -= 0.5f;
 			break;
 		case 'l':
-			ENV.heading += M_PI / 4;
+			ENV.vel[0] += 0.5f;
 			break;
 		default:
 			// TODO
@@ -79,15 +76,13 @@ void input_hndlr()
 
 static inline const char* sampler(int row, int col)
 {
-	if (row == round(ENV.front[0]) && col == round(ENV.front[1]))
+	if (row == 0 && col == 0)
 	{
-		// auto i = static_cast<unsigned>(round(8 * ENV.heading / (M_PI * 2))) % 8;
-		// static char out[2];
-		// out[0] = "-\\|/-\\|/"[i];
-		return ".";
+		static char buf[32];
+		auto& traj = replay_buffer.current_trajectory();
+		snprintf(buf, sizeof(buf), "%d/%lld - %d - %f", traj.write_ptr, traj.states.n_cols, replay_buffer.write_ptr, traj.R());
+		return buf;
 	}
-
-
 
 	if (row == round(ENV.goal[0]) && col == round(ENV.goal[1]))
 	{
@@ -103,12 +98,29 @@ static inline const char* sampler(int row, int col)
 	return " ";
 }
 
-void spawn_goal()
+void spawn(float p[2])
 {
-	ENV.goal[0] = rand() % term.max_rows;
-	ENV.goal[1] = rand() % term.max_cols;
+	p[0] = 1 + rand() % (term.max_rows-1);
+	p[1] = rand() % term.max_cols;	
 }
 
+void reset()
+{
+	// srand(0);
+	ENV.goal[0] = 10;
+	ENV.goal[1] = 12;
+	ENV.position[0] = 40;
+	ENV.position[1] = 21;
+	// spawn(ENV.goal);
+	// spawn(ENV.position);
+	ENV.vel[0] = 0;
+	ENV.vel[1] = 0;
+}
+
+float randf()
+{
+	return (float)(rand() % 2048 - 1024) / 1024.0f;
+}
 
 int playing()
 {
@@ -116,37 +128,95 @@ int playing()
 	return 1;
 }
 
-float distance()
+float distance(float p0[2], float p2[2])
 {
-	auto dx = ENV.goal[0] - ENV.position[0];
-	auto dy = ENV.goal[1] - ENV.position[1];
+	auto dx = p0[0] - p2[0];
+	auto dy = p0[1] - p2[1];
 	return sqrt(dx*dx + dy*dy);
 }
 
-state get_state()
+float distance_to_goal()
+{
+	return distance(ENV.vel, ENV.goal) + 0.0001;
+}
+
+RL::State get_state()
 {
 	auto dx = ENV.goal[0] - ENV.position[0];
 	auto dy = ENV.goal[1] - ENV.position[1];
 	return {
 		{dx, dy},
-		{sin(ENV.heading),cos(ENV.heading)}
+		{ENV.vel[0], ENV.vel[1]}
 	};
+}
+
+void sim_step()
+{
+	auto d_t_1 = distance_to_goal();
+	ENV.position[0] += ENV.vel[0];
+	ENV.position[1] += ENV.vel[1];
+
+	if (ENV.position[0] < 1)
+	{
+		ENV.position[0] = 1;
+		ENV.vel[0] = 0;
+	}
+	if (ENV.position[0] >= term.max_rows)
+	{
+		ENV.position[0] = term.max_rows-1;
+		ENV.vel[0] = 0;
+	}
+	if (ENV.position[1] < 0)
+	{
+		ENV.position[1] = 0;
+		ENV.vel[1] = 0;
+	}
+	if (ENV.position[1] >= term.max_cols)
+	{
+		ENV.position[1] = term.max_cols-1;
+		ENV.vel[1] = 0;
+	}
+
+
+	ENV.vel[0] *= 0.9f;
+	ENV.vel[1] *= 0.9f;
+	auto d_t = distance_to_goal();
+
+	auto reward_t = (d_t_1 - d_t) - 0.0001f;
+
+	if (distance_to_goal() < 4)
+	{
+		reward_t += 10;
+	}
+
+	auto a = net::act(get_state());
+	a.d_r += randf() * 0.1f;
+	a.d_c += randf() * 0.1f;
+	ENV.vel[0] += std::min(0.1f, std::max(-0.1f, a.d_r));
+	ENV.vel[1] += std::min(0.1f, std::max(-0.1f, a.d_c));
+
+	replay_buffer.append(get_state(), a, reward_t);
+
 }
 
 void update()
 {
-	auto d_t_1 = distance();
-	ENV.front[0] = 1 * sin(ENV.heading) + ENV.position[0];
-	ENV.front[1] = 1 * cos(ENV.heading) + ENV.position[1];
-	ENV.position[0] += (ENV.front[0] - ENV.position[0]) * ENV.speed;
-	ENV.position[1] += (ENV.front[1] - ENV.position[1]) * ENV.speed;
-	auto d_t = distance();
+	sim_step();
 
-	auto reward_t = d_t - d_t_1;
-
-	auto a = net::act(get_state());
-	ENV.heading += a.d_heading;
-	ENV.speed = std::max(0.5f, std::min(-0.5f, a.d_pos));
+	if (replay_buffer.full())
+	{
+		std::cout << replay_buffer.avg_reward() << std::endl;
+		for (auto& t : replay_buffer.trajectories)
+		{
+			net::train_policy_gradient(t, {replay_buffer.current_trajectory().states.n_cols, 0, 0.01f});
+		}
+		replay_buffer.clear();
+		reset();
+	}
+	else if (replay_buffer.current_trajectory().full())
+	{
+		reset();
+	}
 }
 
 
@@ -166,7 +236,7 @@ int main(int argc, char* argv[])
 
 	net::init(4, 2);
 
-	spawn_goal();
+	reset();
 
 	while (playing())
 	{

@@ -33,7 +33,7 @@ int main (int argc, const char* argv[])
 	// Step size of the optimizer.
 	const double STEP_SIZE = 1e-2;
 	// Number of data points in each iteration of SGD
-	const size_t BATCH_SIZE = 32;//1024;
+	const size_t BATCH_SIZE = 1;//1024;
 	// Allow up to 50 epochs, unless we are stopped early by EarlyStopAtMinLoss.
 	const int EPOCHS = 100 * X.n_cols;
 

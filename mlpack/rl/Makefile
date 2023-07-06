@@ -10,3 +10,7 @@ list-objs:
 
 driver: $(OBJS)
 	g++ -g -std=c++17 -I gitman_sources $^ -o $@ -larmadillo -lncurses -lpthread -lm
+
+.PHONY: clean
+clean:
+	rm -f *.o driver
