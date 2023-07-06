@@ -6,7 +6,7 @@ using namespace mlpack;
 template<size_t action_size, typename MatType=arma::mat>
 struct PolicyGradientLoss
 {
-	PolicyGradientLoss(float gamma = 0.99f) : m_gamma(gamma) {}
+	PolicyGradientLoss(float gamma = 0.999f) : m_gamma(gamma) {}
 
 	typename
 	MatType::elem_type R(const MatType& rewards)
@@ -63,7 +63,9 @@ static FFN<PolicyGradientLoss<2, arma::fmat>, RandomInitialization, arma::fmat> 
 void net::init(size_t observation_size, size_t action_size)
 {
 	model.Add<LinearType<arma::fmat>>(observation_size);
-	model.Add<LinearType<arma::fmat>>(8);
+	model.Add<LinearType<arma::fmat>>(128);
+	// model.Add<SigmoidType<arma::fmat>>();
+	model.Add<LinearType<arma::fmat>>(16);
 	model.Add<LinearType<arma::fmat>>(action_size);
 }
 

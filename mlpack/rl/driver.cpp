@@ -17,6 +17,7 @@ struct {
 	float position[2];
 	float vel[2];
 	float goal[2];
+	float last_reward;
 } ENV;
 
 RL::ReplayBuffer replay_buffer(1);
@@ -76,13 +77,13 @@ void input_hndlr()
 
 static inline const char* sampler(int row, int col)
 {
-	if (row == 0 && col == 0)
-	{
-		static char buf[32];
-		auto& traj = replay_buffer.current_trajectory();
-		snprintf(buf, sizeof(buf), "%d/%lld - %d - %f", traj.write_ptr, traj.states.n_cols, replay_buffer.write_ptr, traj.R());
-		return buf;
-	}
+	// if (row == 0 && col == 0)
+	// {
+	// 	static char buf[32];
+	// 	auto& traj = replay_buffer.current_trajectory();
+	// 	snprintf(buf, sizeof(buf), "%d/%lld - %f (%f)", traj.write_ptr, traj.states.n_cols, ENV.last_reward, traj.R());
+	// 	return buf;
+	// }
 
 	if (row == round(ENV.goal[0]) && col == round(ENV.goal[1]))
 	{
@@ -91,7 +92,18 @@ static inline const char* sampler(int row, int col)
 
 	if (row == round(ENV.position[0]) && col == round(ENV.position[1]))
 	{
-		return "o";
+		if (ENV.last_reward > 0)
+		{
+			return "\033[0;32mo\033[0m";
+		}
+		else if (ENV.last_reward < 0)
+		{
+			return "\033[0;31mo\033[0m";
+		}
+		else
+		{
+			return "o";
+		}
 	}
 
 	// return character for a given row and column in the terminal
@@ -111,8 +123,8 @@ void reset()
 	ENV.goal[1] = 12;
 	ENV.position[0] = 40;
 	ENV.position[1] = 21;
-	// spawn(ENV.goal);
-	// spawn(ENV.position);
+	spawn(ENV.goal);
+	spawn(ENV.position);
 	ENV.vel[0] = 0;
 	ENV.vel[1] = 0;
 }
@@ -137,7 +149,7 @@ float distance(float p0[2], float p2[2])
 
 float distance_to_goal()
 {
-	return distance(ENV.vel, ENV.goal) + 0.0001;
+	return distance(ENV.position, ENV.goal) + 0.0001;
 }
 
 RL::State get_state()
@@ -182,12 +194,14 @@ void sim_step()
 	ENV.vel[1] *= 0.9f;
 	auto d_t = distance_to_goal();
 
-	auto reward_t = (d_t_1 - d_t) - 0.0001f;
+	auto reward_t = (d_t_1 - d_t) - 0.1f;
 
-	if (distance_to_goal() < 4)
+	if (distance_to_goal() < 2)
 	{
-		reward_t += 10;
+		reward_t += 0.2f;
 	}
+
+	ENV.last_reward = reward_t;
 
 	auto a = net::act(get_state());
 	a.d_r += randf() * 0.1f;
@@ -244,7 +258,11 @@ int main(int argc, char* argv[])
 		update();
 		tg_rasterize(term.max_rows, term.max_cols, sampler);
 		tg_clear(term.max_rows);
+	
+		auto& traj = replay_buffer.current_trajectory();
+		// printf("%d/%lld - %f (%f)\n", traj.write_ptr, traj.states.n_cols, ENV.last_reward, traj.R());
 	}
+	
 
 	tg_restore_settings(&oldt);
 

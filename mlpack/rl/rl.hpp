@@ -23,11 +23,11 @@ namespace RL
 		arma::fmat action_rewards;
 		unsigned write_ptr = 0;
 
-		Trajectory(size_t len=64);
+		Trajectory(size_t len=128);
 
 		void append(const State& x, const Action& a, float r);
 
-		float R(float gamma=0.99f);
+		float R(float gamma=0.999f);
 
 		bool full() const { return write_ptr >= states.n_cols; }
 
