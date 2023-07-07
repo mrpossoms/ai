@@ -25,7 +25,7 @@ struct PolicyGradientLoss
 	                                      const MatType& action_rewards)
 	{
 		auto loss_sum = R(action_rewards.row(action_size)); // * arma::accu(arma::log(prediction));
-		return loss_sum;
+		return -loss_sum;
 	}
 
 	void Backward(const MatType& prediction,
@@ -60,27 +60,35 @@ private:
 
 static FFN<PolicyGradientLoss<2, arma::fmat>, RandomInitialization, arma::fmat> model;
 
+ens::Adam optimizer;
+
 void net::init(size_t observation_size, size_t action_size)
 {
-	model.Add<LinearType<arma::fmat>>(observation_size);
-	model.Add<LinearType<arma::fmat>>(128);
-	// model.Add<SigmoidType<arma::fmat>>();
-	model.Add<LinearType<arma::fmat>>(16);
-	model.Add<LinearType<arma::fmat>>(action_size);
+	model.Add<LinearType<arma::fmat, L1Regularizer>>(observation_size);
+	model.Add<LinearType<arma::fmat, L1Regularizer>>(16);
+	model.Add<SigmoidType<arma::fmat>>();
+	model.Add<LinearType<arma::fmat, L1Regularizer>>(4);
+	model.Add<SigmoidType<arma::fmat>>();
+	model.Add<LinearType<arma::fmat, L1Regularizer>>(action_size);
 }
 
 void net::train_policy_gradient(const RL::Trajectory& trajectory, const net::hyper_parameters& hp)
 {
-	ens::Adam optimizer(
-		hp.learning_rate,  // Step size of the optimizer.
-		trajectory.states.n_cols, // Batch size. Number of data points that are used in each
-		            // iteration.
-		0.9,        // Exponential decay rate for the first moment estimates.
-		0.999, // Exponential decay rate for the weighted infinity norm estimates.
-		1e-8,  // Value used to initialise the mean squared gradient parameter.
-		hp.epochs, // Max number of iterations.
-		1e-8,           // Tolerance.
-		false);
+	static bool first = true;
+	if (first)
+	{
+		optimizer = ens::Adam(
+			hp.learning_rate,  // Step size of the optimizer.
+			trajectory.states.n_cols, // Batch size. Number of data points that are used in each
+			            // iteration.
+			0.9,        // Exponential decay rate for the first moment estimates.
+			0.999, // Exponential decay rate for the weighted infinity norm estimates.
+			1e-8,  // Value used to initialise the mean squared gradient parameter.
+			hp.epochs, // Max number of iterations.
+			1e-8,           // Tolerance.
+			false);
+		first = false;
+	}
 
 	model.Train(
 		trajectory.states,

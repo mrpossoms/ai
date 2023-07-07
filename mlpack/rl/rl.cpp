@@ -14,6 +14,9 @@ void RL::Trajectory::append(const RL::State& x, const RL::Action& a, float r)
 	states.col(write_ptr)[1] = x.d_goal[1];
 	states.col(write_ptr)[2] = x.vel[0];
 	states.col(write_ptr)[3] = x.vel[1];
+	states.col(write_ptr)[4] = x.vel3[0];
+	states.col(write_ptr)[5] = x.vel3[1];
+	
 
 	action_rewards.col(write_ptr)[0] = a.d_r;
 	action_rewards.col(write_ptr)[1] = a.d_c;

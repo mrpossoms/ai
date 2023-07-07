@@ -8,6 +8,7 @@ namespace RL
 	{
 		float d_goal[2];
 		float vel[2];
+		float vel3[2];
 	};
 
 	struct Action
