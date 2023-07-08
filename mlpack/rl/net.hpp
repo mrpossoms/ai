@@ -15,6 +15,8 @@ namespace net
 
 	void init(size_t observation_size, size_t action_size);
 
+	bool loaded();
+
 	void train_policy_gradient(const RL::Trajectory& trajectory, const hyper_parameters& hp={});
 
 	RL::Action act(const RL::State& x);

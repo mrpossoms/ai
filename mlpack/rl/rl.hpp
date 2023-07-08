@@ -2,13 +2,25 @@
 // #include <mlpack/core.hpp>
 #include <armadillo>
 
+static float randf()
+{
+	return (float)(((int)rand() % 2048) - 1024) / 1024.0f;
+}
+
 namespace RL 
 {
 	struct State
 	{
 		float d_goal[2];
 		float vel[2];
-		float vel3[2];
+
+		State perturb(float p_scale, float v_scale)
+		{
+			return {
+				{ d_goal[0] + p_scale * randf(), d_goal[1] + p_scale * randf() },
+				{ vel[0] + v_scale * randf(), vel[1] + v_scale * randf() }
+			};
+		}
 	};
 
 	struct Action
@@ -20,8 +32,8 @@ namespace RL
 
 	struct Trajectory
 	{
-		arma::fmat states;
-		arma::fmat action_rewards;
+		arma::mat states;
+		arma::mat action_rewards;
 		unsigned write_ptr = 0;
 
 		Trajectory(size_t len=128);

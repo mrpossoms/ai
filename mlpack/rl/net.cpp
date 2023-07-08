@@ -1,5 +1,7 @@
 #include "net.hpp"
-#include <mlpack.hpp>
+#define MLPACK_ENABLE_ANN_SERIALIZATION
+#include <mlpack/core.hpp>
+#include <mlpack/methods/ann.hpp>
 
 using namespace mlpack;
 
@@ -34,43 +36,53 @@ struct PolicyGradientLoss
 	{
 		gradient.set_size(size(prediction));
 
-		// std::cout << "pred: " << prediction << std::endl << "action: " << action_rewards << std::endl;
-
-		// for (unsigned c = 0; c < prediction.n_cols; c++)
-		// {
-		// 	gradient.col(c) = arma::log(prediction.col(c)) * pow(m_gamma, c) * action_rewards.col(c)[action_size];
-		// }
-
 		for (unsigned c = 0; c < prediction.n_cols; c++)
 		{
 			gradient.col(c) = -(pow(m_gamma, c) * action_rewards.col(c)[action_size]) / prediction.col(c);
 		}
-
-		// std::cout << gradient << std::endl;
-		// sleep(1);
-
-		// gradient = -R(action_rewards.row(action_size-1)) / prediction;
-		// gradient = arma::log(prediction) * R(action_rewards.row(action_size-1));
 	}
 
+	template<typename Archive>
+	void serialize(
+	    Archive& ar,
+	    const uint32_t /* version */)
+	{
+	    ar(CEREAL_NVP(m_gamma));
+	}
 
 private:
 	float m_gamma;
 };
 
-static FFN<PolicyGradientLoss<2, arma::fmat>, RandomInitialization, arma::fmat> model;
+static FFN<PolicyGradientLoss<2, arma::mat>, RandomInitialization, arma::mat> model;
 
 ens::Adam optimizer;
+bool LOADED = false;
 
 void net::init(size_t observation_size, size_t action_size)
 {
-	model.Add<LinearType<arma::fmat, L1Regularizer>>(observation_size);
-	model.Add<LinearType<arma::fmat, L1Regularizer>>(16);
-	model.Add<SigmoidType<arma::fmat>>();
-	model.Add<LinearType<arma::fmat, L1Regularizer>>(4);
-	model.Add<SigmoidType<arma::fmat>>();
-	model.Add<LinearType<arma::fmat, L1Regularizer>>(action_size);
+	model.Add<LinearType<arma::mat, NoRegularizer>>(observation_size);
+	model.Add<LinearType<arma::mat, NoRegularizer>>(16);
+	// model.Add<LeakyReLUType<arma::mat>>();
+	model.Add<LinearType<arma::mat, NoRegularizer>>(4);
+	// model.Add<LeakyReLUType<arma::mat>>();
+	model.Add<LinearType<arma::mat, NoRegularizer>>(action_size);
+
+	if (!mlpack::data::Load("model.json", "model", model))
+	{
+		std::cout << "Failed to load model." << std::endl;
+	}
+	else
+	{
+		LOADED = true;
+	}
 }
+
+bool net::loaded()
+{
+	return LOADED;
+}
+
 
 void net::train_policy_gradient(const RL::Trajectory& trajectory, const net::hyper_parameters& hp)
 {
@@ -94,12 +106,17 @@ void net::train_policy_gradient(const RL::Trajectory& trajectory, const net::hyp
 		trajectory.states,
 		trajectory.action_rewards,
 		optimizer);
+
+	if (!mlpack::data::Save("model.json", "model", model, true))
+	{
+		std::cout << "Failed to save model." << std::endl;
+	}
 }
 
 RL::Action net::act(const RL::State& x)
 {
-	arma::fmat _x(4,1);
-	arma::fmat _a(2,1);
+	arma::mat _x(4,1);
+	arma::mat _a(2,1);
 	_x.row(0)[0] = x.d_goal[0];
 	_x.row(1)[0] = x.d_goal[1];
 	_x.row(2)[0] = x.vel[0];

@@ -11,7 +11,8 @@
 #include "net.hpp"
 #include "rl.hpp"
 
-int TG_TIMEOUT = 5000;
+int TG_TIMEOUT = 100;
+bool PLAYING = true;
 
 struct {
 	float position[2];
@@ -20,32 +21,33 @@ struct {
 	float last_reward;
 	RL::Action last_action;
 
-	char trace[40][80];
+	int trace[40][80] = {};
 } ENV;
 
-RL::ReplayBuffer replay_buffer(8);
+RL::ReplayBuffer replay_buffer(16 * 4);
 
 struct {
 	int max_rows, max_cols;
 } term = { 18, 0 };
 
 struct termios oldt;
-
+static std::random_device rd;  // a seed source for the random number engine
+static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
 void sig_winch_hndlr(int sig)
 {
 	term.max_cols = tg_term_width();
-	if (term.max_cols < 0)
-	{
-		term.max_cols = 80;
-	}
+	term.max_rows = tg_term_height();
+
+	term.max_cols = std::min(term.max_cols, 80);
+	term.max_rows = std::min(term.max_rows, 40);
 }
 
 
 void sig_int_hndlr(int sig)
 {
 	tg_restore_settings(&oldt);
-	exit(1);
+	PLAYING = false;
 }
 
 
@@ -80,14 +82,6 @@ void input_hndlr()
 
 static inline const char* sampler(int row, int col)
 {
-	// if (row == 0 && col == 0)
-	// {
-	// 	static char buf[32];
-	// 	auto& traj = replay_buffer.current_trajectory();
-	// 	snprintf(buf, sizeof(buf), "%d/%lld - %f (%f)", traj.write_ptr, traj.states.n_cols, ENV.last_reward, traj.R());
-	// 	return buf;
-	// }
-
 	if (row == (int)(ENV.position[0]) && col == (int)(ENV.position[1]))
 	{
 		if (ENV.last_reward > 0)
@@ -111,19 +105,21 @@ static inline const char* sampler(int row, int col)
 
 	// return character for a given row and column in the terminal
 	static char tmp[2] = {};
-	tmp[0] = ENV.trace[row][col];
+	char spec[] = " .,'\"*";
+
+	ENV.trace[row][col] = std::max(ENV.trace[row][col]-1, 0);
+
+	tmp[0] = spec[(5 * ENV.trace[row][col]) / 100];
 	return tmp;
 }
 
 void spawn(float p[2])
 {
-	p[0] = 1 + rand() % (term.max_rows-1);
-	p[1] = rand() % term.max_cols;	
-}
+    std::uniform_int_distribution<> r_dist(1, term.max_rows-1);
+    std::uniform_int_distribution<> c_dist(0, term.max_cols-1);
 
-float randf()
-{
-	return (float)(((int)rand() % 2048) - 1024) / 1024.0f;
+	p[0] = r_dist(gen);
+	p[1] = c_dist(gen);	
 }
 
 void reset()
@@ -138,13 +134,13 @@ void reset()
 	ENV.vel[0] = randf();
 	ENV.vel[1] = randf();
 
-	memset(ENV.trace, ' ', sizeof(ENV.trace));
+	memset(ENV.trace, 0, sizeof(ENV.trace));
 }
 
 int playing()
 {
 	// return 0 when the game loop should terminate
-	return 1;
+	return PLAYING;
 }
 
 float distance(float p0[2], float p2[2])
@@ -166,7 +162,6 @@ RL::State get_state()
 	return {
 		{dx, dy},
 		{ENV.vel[0], ENV.vel[1]},
-		{pow(ENV.vel[0], 3), pow(ENV.vel[1], 3)},
 	};
 }
 
@@ -176,29 +171,9 @@ void sim_step()
 	ENV.position[0] += ENV.vel[0];
 	ENV.position[1] += ENV.vel[1];
 
-	// if (ENV.position[0] < 1)
-	// {
-	// 	ENV.position[0] = 1;
-	// 	ENV.vel[0] = 0;
-	// }
-	// if (ENV.position[0] >= term.max_rows)
-	// {
-	// 	ENV.position[0] = term.max_rows-1;
-	// 	ENV.vel[0] = 0;
-	// }
-	// if (ENV.position[1] < 0)
-	// {
-	// 	ENV.position[1] = 0;
-	// 	ENV.vel[1] = 0;
-	// }
-	// if (ENV.position[1] >= term.max_cols)
-	// {
-	// 	ENV.position[1] = term.max_cols-1;
-	// 	ENV.vel[1] = 0;
-	// }
 	if (ENV.position[0] > 0 && ENV.position[0] < term.max_rows && ENV.position[1] >= 0 && ENV.position[1] < term.max_cols)
 	{
-		ENV.trace[(int)ENV.position[0]][(int)ENV.position[1]] = '.';
+		ENV.trace[(int)ENV.position[0]][(int)ENV.position[1]] = 100;
 	}
 
 	ENV.vel[0] *= 0.9f;
@@ -210,15 +185,15 @@ void sim_step()
 
 	if (distance_to_goal() < 2)
 	{
-		reward_t += 0.2f;
+		reward_t += 1.f;
 	}
 
 	ENV.last_reward = reward_t;
 	replay_buffer.append(get_state(), ENV.last_action, reward_t);
 
-	auto a = net::act(get_state());
-	auto u_r = a.d_r + randf() * 0.01f;
-	auto u_c = a.d_c + randf() * 0.01f;
+	auto a = net::act(get_state().perturb(1.0f, 0.1f));
+	auto u_r = a.d_r;
+	auto u_c = a.d_c;
 	ENV.last_action = {u_r, u_c};
 
 	u_r = std::min(0.1f, std::max(-0.1f, u_r));
@@ -228,23 +203,37 @@ void sim_step()
 	ENV.vel[1] += u_c;
 }
 
+unsigned training_step = 0;
+
 void update()
 {
 	sim_step();
 
-	if (replay_buffer.full())
+	if (net::loaded())
 	{
-		std::cout << replay_buffer.avg_reward() << std::endl;
-		for (auto& t : replay_buffer.trajectories)
+		TG_TIMEOUT = 10000;
+		if (distance_to_goal() < 2)
 		{
-			net::train_policy_gradient(t, {replay_buffer.current_trajectory().states.n_cols, 0, 0.001f});
+			spawn(ENV.goal);
 		}
-		replay_buffer.clear();
-		reset();
 	}
-	else if (replay_buffer.current_trajectory().full())
+	else
 	{
-		reset();
+		if (replay_buffer.full())
+		{
+			std::cout << replay_buffer.avg_reward() << std::endl;
+			for (auto& t : replay_buffer.trajectories)
+			{
+				net::train_policy_gradient(t, {replay_buffer.current_trajectory().states.n_cols, 0, 0.0001});
+				training_step++;
+			}
+			replay_buffer.clear();
+			reset();
+		}
+		else if (replay_buffer.current_trajectory().full())
+		{
+			reset();
+		}
 	}
 }
 
@@ -263,17 +252,21 @@ int main(int argc, char* argv[])
 	term.max_rows = 40;
 	term.max_cols = 80;
 
-	net::init(6, 2);
+	net::init(4, 2);
 
 	reset();
 
 	while (playing())
 	{
-		input_hndlr();
 		update();
-		tg_rasterize(term.max_rows, term.max_cols, sampler);
-		tg_clear(term.max_rows);
 	
+		if (net::loaded())
+		{
+			input_hndlr();
+			tg_rasterize(term.max_rows, term.max_cols, sampler);
+			tg_clear(term.max_rows);			
+		}
+
 		auto& traj = replay_buffer.current_trajectory();
 		// printf("%d/%lld - %f (%f)\n", traj.write_ptr, traj.states.n_cols, ENV.last_reward, traj.R());
 	}
