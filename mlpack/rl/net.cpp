@@ -1,60 +1,13 @@
 #include "net.hpp"
+#include "policy_gradient.hpp"
 #define MLPACK_ENABLE_ANN_SERIALIZATION
 #include <mlpack/core.hpp>
 #include <mlpack/methods/ann.hpp>
 
 using namespace mlpack;
 
-template<size_t action_size, typename MatType=arma::mat>
-struct PolicyGradientLoss
-{
-	PolicyGradientLoss(float gamma = 0.999f) : m_gamma(gamma) {}
 
-	typename
-	MatType::elem_type R(const MatType& rewards)
-	{
-		float r = {};
-		for (unsigned i = 0; i < rewards.n_cols; i++)
-		{
-			r += pow(m_gamma, i) * rewards.col(i)[0];
-		}
-		
-		return r;
-	}
-
-	typename
-	MatType::elem_type Forward(const MatType& prediction,
-	                                      const MatType& action_rewards)
-	{
-		auto loss_sum = R(action_rewards.row(action_size)); // * arma::accu(arma::log(prediction));
-		return -loss_sum;
-	}
-
-	void Backward(const MatType& prediction,
-	              const MatType& action_rewards,
-	              MatType& gradient)
-	{
-		gradient.set_size(size(prediction));
-
-		for (unsigned c = 0; c < prediction.n_cols; c++)
-		{
-			gradient.col(c) = -(pow(m_gamma, c) * action_rewards.col(c)[action_size]) / prediction.col(c);
-		}
-	}
-
-	template<typename Archive>
-	void serialize(
-	    Archive& ar,
-	    const uint32_t /* version */)
-	{
-	    ar(CEREAL_NVP(m_gamma));
-	}
-
-private:
-	float m_gamma;
-};
-
-static FFN<PolicyGradientLoss<2, arma::mat>, RandomInitialization, arma::mat> model;
+static FFN<PolicyGradientLoss<arma::mat>, RandomInitialization, arma::mat> model;
 
 ens::Adam optimizer;
 bool LOADED = false;
@@ -63,9 +16,7 @@ void net::init(size_t observation_size, size_t action_size)
 {
 	model.Add<LinearType<arma::mat, NoRegularizer>>(observation_size);
 	model.Add<LinearType<arma::mat, NoRegularizer>>(16);
-	// model.Add<LeakyReLUType<arma::mat>>();
 	model.Add<LinearType<arma::mat, NoRegularizer>>(4);
-	// model.Add<LeakyReLUType<arma::mat>>();
 	model.Add<LinearType<arma::mat, NoRegularizer>>(action_size);
 
 	if (!mlpack::data::Load("model.json", "model", model))
@@ -116,7 +67,7 @@ void net::train_policy_gradient(const RL::Trajectory& trajectory, const net::hyp
 RL::Action net::act(const RL::State& x)
 {
 	arma::mat _x(4,1);
-	arma::mat _a(2,1);
+	arma::mat _a(sizeof(RL::Action) / sizeof(float),1);
 	_x.row(0)[0] = x.d_goal[0];
 	_x.row(1)[0] = x.d_goal[1];
 	_x.row(2)[0] = x.vel[0];
@@ -124,5 +75,12 @@ RL::Action net::act(const RL::State& x)
 
 	model.Predict(_x, _a);
 
-	return { _a.row(0)[0], _a.row(1)[0], };
+	RL::Action a;
+
+	for (unsigned i = 0; i < sizeof(RL::Action) / sizeof(float); i++)
+	{
+		a.u[i] = _a(i, 0);
+	}
+
+	return a;
 }

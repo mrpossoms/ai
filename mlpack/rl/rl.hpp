@@ -23,10 +23,16 @@ namespace RL
 		}
 	};
 
-	struct Action
+	union Action
 	{
-		float d_r;
-		float d_c;
+		float u[4];
+		struct
+		{
+			float d_r_pos;
+			float d_r_neg;
+			float d_c_pos;
+			float d_c_neg;
+		};
 	};
 
 

@@ -24,7 +24,7 @@ struct {
 	int trace[40][80] = {};
 } ENV;
 
-RL::ReplayBuffer replay_buffer(16 * 4);
+RL::ReplayBuffer replay_buffer(64);
 
 struct {
 	int max_rows, max_cols;
@@ -191,9 +191,20 @@ void sim_step()
 	ENV.last_reward = reward_t;
 	replay_buffer.append(get_state(), ENV.last_action, reward_t);
 
-	auto a = net::act(get_state().perturb(1.0f, 0.1f));
-	auto u_r = a.d_r;
-	auto u_c = a.d_c;
+	auto a = net::act(get_state()); //.perturb(1.0f, 0.1f));
+	auto u_r = a.d_r_pos;
+	auto u_c = a.d_c_pos;
+
+	if (a.d_r_pos < a.d_r_neg)
+	{
+		u_r = -a.d_r_neg;
+	}
+
+	if (a.d_c_pos < a.d_c_neg)
+	{
+		u_c = -a.d_c_neg;
+	}
+
 	ENV.last_action = {u_r, u_c};
 
 	u_r = std::min(0.1f, std::max(-0.1f, u_r));
@@ -252,7 +263,7 @@ int main(int argc, char* argv[])
 	term.max_rows = 40;
 	term.max_cols = 80;
 
-	net::init(4, 2);
+	net::init(4, sizeof(RL::Action) / sizeof(float));
 
 	reset();
 
