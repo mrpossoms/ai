@@ -235,7 +235,7 @@ void update()
 			std::cout << replay_buffer.avg_reward() << std::endl;
 			for (auto& t : replay_buffer.trajectories)
 			{
-				net::train_policy_gradient(t, {(unsigned)replay_buffer.current_trajectory().states.n_cols, 0, 0.0001});
+				net::train_policy_gradient(t, {(unsigned)replay_buffer.current_trajectory().states.n_cols, 0, 0.001});
 				training_step++;
 			}
 			replay_buffer.clear();
