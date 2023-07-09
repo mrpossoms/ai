@@ -30,11 +30,12 @@ struct PolicyGradientLoss
 	              const MatType& action_rewards,
 	              MatType& gradient)
 	{
-		gradient.set_size(size(prediction));
+		arma::mat action = action_rewards.submat(0, 0, action_rewards.n_rows-2, action_rewards.n_cols-1);
+		gradient.set_size(size(action));
 
 		for (unsigned c = 0; c < prediction.n_cols; c++)
 		{
-			gradient.col(c) = -(pow(m_gamma, c) * action_rewards.col(c)[action_rewards.n_rows-1]) / prediction.col(c);
+			gradient.col(c) = -(pow(m_gamma, c) * action_rewards.col(c)[action_rewards.n_rows-1]) / action.col(c);
 		}
 	}
 
