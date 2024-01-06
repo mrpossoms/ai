@@ -26,12 +26,11 @@ struct Net : torch::nn::Module
 
 	torch::Tensor forward(torch::Tensor x)
 	{
-		for (unsigned i = 0; i < sizeof(layers) / sizeof(torch::nn::Linear); i++)
-		{
-			x = layers[i](x);
-		}
+		auto a0 = torch::leaky_relu(layers[0]->forward(x));
+		auto a1 = torch::leaky_relu(layers[1]->forward(a0));
+		auto a2 = torch::softmax(layers[2]->forward(a1), 1);
 
-		return x;
+		return a2;
 	}
 
 	torch::nn::Linear layers[3] = {
@@ -42,15 +41,19 @@ struct Net : torch::nn::Module
 };
 
 Net model;
+std::unique_ptr<torch::optim::Adam> optimizer;
 
 void net::init(size_t observation_size, size_t action_size)
 {
-	// model.Add<LinearType<arma::mat, NoRegularizer>>(observation_size);
-	// model.Add<LinearType<arma::mat, NoRegularizer>>(16);
-	// model.Add<LinearType<arma::mat, NoRegularizer>>(4);
-	// model.Add<LinearType<arma::mat, NoRegularizer>>(action_size);
-
 	model = Net(observation_size, action_size);
+	model.train();
+
+	optimizer = std::make_unique<torch::optim::Adam>(
+		model.parameters(),
+		torch::optim::AdamOptions(2e-4).betas(std::make_tuple(0.5, 0.5))
+	);
+
+	// torch::autograd::AnomalyMode::set_enabled(true);
 
 	// if (!mlpack::data::Load("model.json", "model", model))
 	// {
@@ -69,49 +72,62 @@ bool net::loaded()
 
 void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_parameters& hp)
 {
-	static bool first = true;
-	if (first)
-	{
-		// optimizer = ens::Adam(
-		// 	hp.learning_rate,  // Step size of the optimizer.
-		// 	traj.state.n_cols, // Batch size. Number of data points that are used in each
-		// 	            // iteration.
-		// 	0.9,        // Exponential decay rate for the first moment estimates.
-		// 	0.999, // Exponential decay rate for the weighted infinity norm estimates.
-		// 	1e-8,  // Value used to initialise the mean squared gradient parameter.
-		// 	hp.epochs, // Max number of iterations.
-		// 	1e-8,           // Tolerance.
-		// 	false);
-		// first = false;
-	}
+	// model.train();
 
-	torch::optim::Adam optimizer(
-    model.parameters(), torch::optim::AdamOptions(2e-4).betas(std::make_tuple(0.5, 0.5)));
+	optimizer->zero_grad();
 
 	float R = 0;
-	torch::Tensor returns = torch::zeros({traj.rewards.size(), 1});
-	
+
+	std::vector<float> returns;
 	for (int i = traj.rewards.size() - 1; i >= 0; i--)
 	{
-		R = traj.rewards[i] + 0.999f * R;
-		returns[i] = R;
+		returns.push_back(traj.rewards[i] * pow(0.999f, i));
 	}
 
-	returns = (returns - returns.mean()) / (returns.std() + 1e-8);
+	torch::Tensor returns_tensor = torch::tensor(returns);
+	// returns_tensor = (returns_tensor - returns_tensor.mean()) / (returns_tensor.std() + 1e-8);
 
-	torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 4});
+	// std::cout << "RRRRRRRRRRRRRRRRRRRRRRR" << std::endl;
+	// std::cout << returns_tensor << std::endl;
+	assert(returns_tensor.isnan().sum().item<int>() == 0);
+
+	std::vector<torch::Tensor> policy_loss;
+	// torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 1, 4});
+
 	for (int i = 0; i < traj.rewards.size(); i++)
 	{
 		auto& prob = traj.action_probs[i];
-		policy_loss[i] = -torch::log(prob) * returns[i];
+		// std::cout << prob << std::endl;
+
+		// should be -log()
+		policy_loss.push_back(-torch::log(prob) * returns_tensor[i]);
 	}
 
-	optimizer.zero_grad();
+	// std::cout << "-------------------" << std::endl;
+	// std::cout << policy_loss << std::endl;
 
+	torch::Tensor policy_loss_tensor = torch::stack(policy_loss);
+	auto policy_loss_mu = policy_loss_tensor.sum(); // / traj.rewards.size();
+	policy_loss_mu.requires_grad_(true);
+
+	std::cout << policy_loss_mu << std::endl;
+
+	// assert policy_loss_tensor is not nan
+	assert(!std::isnan(policy_loss_mu.template item<float>()));
+	
 	// copilot generated this, check later
-	policy_loss.mean().backward();
-	optimizer.step();
+	policy_loss_mu.backward();
+	optimizer->step();
 
+	// assert that model parameters are not nan
+	for (auto& param : model.parameters())
+	{
+		std::cout << "---------" << std::endl;
+		std::cout << param << std::endl;
+		assert(param.isnan().sum().item<int>() == 0);
+	}
+
+	// model.eval();
 
 	// for (int64_t epoch = 1; epoch <= hp.epochs; ++epoch) 
 	// {
@@ -131,37 +147,39 @@ void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_par
 	// }
 }
 
-torch::Tensor net::act_probs(const RL::State& x)
+torch::Tensor net::act_probs(torch::Tensor x)
 {
-	torch::Tensor _x = torch::zeros({1, 4});
-
-	_x[0][0]= x.d_goal[0];
-	_x[0][1]= x.d_goal[1];
-	_x[0][2]= x.vel[0];
-	_x[0][3]= x.vel[1];
-
-	return model.forward(_x);
+	return model.forward(x);
 }
 
-RL::Action net::act(torch::Tensor& probs)
+RL::Action net::act(torch::Tensor probs)
 {
+	probs /= probs.sum();
+
 	auto p = probs * 1000;
+
+	// std::cout << p << std::endl;
 
 	std::random_device rd;
     std::mt19937 gen(rd());
     std::discrete_distribution<> d({
-    	p[0][0].item<int>(),
-    	p[0][1].item<int>(),
-    	p[0][2].item<int>(),
-    	p[0][3].item<int>()
+    	p[0][0].item<float>(),
+    	p[0][1].item<float>(),
+    	p[0][2].item<float>(),
+    	p[0][3].item<float>()
     });
 
 	// model.Predict(_x, _a);
 
+    auto u_idx = d(gen);
+    assert(u_idx >= 0 && u_idx < 4);
+
+    // std::cout << u_idx << std::endl;
+
     // chose one discrete action
     // TODO: reimplement this using continuous action space
-	RL::Action a;
-	a.u[d(gen)] = 1;
+	RL::Action a = {};
+	a.u[u_idx] = 1;
 
 	return a;
 }

@@ -33,12 +33,13 @@ namespace RL
 
 	struct Trajectory
 	{
+		std::vector<torch::Tensor> state;
 		std::vector<torch::Tensor> action_probs;
 		std::vector<float> rewards;
 
 		Trajectory(size_t len=128);
 
-		void append(const State& x, torch::Tensor& action_probs, float r);
+		void append(torch::Tensor x, torch::Tensor action_probs, float r);
 
 		float R(float gamma=0.999f);
 

@@ -13,8 +13,9 @@ static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
 struct {
 	Renderer::State state;
-	RL::Action last_action;
-	torch::Tensor last_action_probs;
+	// RL::Action last_action;
+	// torch::Tensor last_action_probs;
+	// torch::Tensor last_state;
 } ENV;
 
 RL::Trajectory traj(128);
@@ -38,8 +39,8 @@ void reset()
 	ENV.state.position[1] = 21;
 	spawn(ENV.state.goal);
 	spawn(ENV.state.position);
-	ENV.state.vel[0] = randf();
-	ENV.state.vel[1] = randf();
+	ENV.state.vel[0] = randf() * 0;
+	ENV.state.vel[1] = randf() * 0;
 
 	memset(ENV.state.trace, 0, sizeof(ENV.state.trace));
 }
@@ -54,12 +55,12 @@ float distance(float p0[2], float p2[2])
 {
 	auto dx = p0[0] - p2[0];
 	auto dy = p0[1] - p2[1];
-	return sqrt(dx*dx + dy*dy);
+	return sqrt((dx*dx + dy*dy) + 0.0001);
 }
 
 float distance_to_goal()
 {
-	return distance(ENV.state.position, ENV.state.goal) + 0.0001;
+	return distance(ENV.state.position, ENV.state.goal);
 }
 
 RL::State get_state()
@@ -72,8 +73,44 @@ RL::State get_state()
 	};
 }
 
+torch::Tensor get_state_tensor()
+{
+	auto s = get_state();
+	auto x = torch::zeros({1, 4});
+	x[0][0] = s.d_goal[0];
+	x[0][1] = s.d_goal[1];
+	x[0][2] = s.vel[0];
+	x[0][3] = s.vel[1];
+
+
+	// auto options = torch::TensorOptions().dtype(torch::kFloat32);
+	// torch::Tensor _s({
+	// 	{s.d_goal[0], s.d_goal[1], s.vel[0], s.vel[1]}
+	// });
+
+	// return torch::from_blob(s.d_goal, {1, 4}, options);
+	return x;
+}
+
 void sim_step()
 {
+	auto x = get_state_tensor();
+	auto a_probs = net::act_probs(x).detach(); //.perturb(1.0f, 0.1f));
+	// std::cout << "x: " << x << " | u: " << a_probs << std::endl;
+	auto a = net::act(a_probs);
+
+	const auto k_speed = 0.1f;
+
+	auto max_idx = torch::argmax(a_probs).item<int>();
+
+	switch(max_idx)
+	{
+		case 0: ENV.state.vel[0] += k_speed; break;
+		case 1: ENV.state.vel[0] += -k_speed; break;
+		case 2: ENV.state.vel[1] += k_speed; break;
+		case 3: ENV.state.vel[1] += -k_speed; break;
+	}
+
 	auto d_t_1 = distance_to_goal();
 
 	// Simulate movement dynamics
@@ -91,47 +128,18 @@ void sim_step()
 
 	// compute reward
 	float zero[2] = {0, 0};
-	auto reward_t = (d_t_1 - d_t) - 0.1f;
+	auto reward_t = (d_t_1 - d_t);// - 0.1f;
 
 	if (distance_to_goal() < 2)
 	{
 		reward_t += 1.f;
 	}
 
+	assert(std::isnan(reward_t) == 0);
+
 	ENV.state.last_reward = reward_t;
 
-	// Check if tenso ENV.last_action_probs is initialized
-	if (ENV.last_action_probs.numel() != 0)
-	{
-		traj.append(get_state(), ENV.last_action_probs, reward_t);
-	}
-
-	auto a_probs = net::act_probs(get_state()); //.perturb(1.0f, 0.1f));
-
-	auto a = net::act(a_probs);
-
-	auto u_r = a.d_r_pos;
-	auto u_c = a.d_c_pos;
-
-	if (a.d_r_pos + a.d_r_neg != 0)
-	{
-		if (a.d_r_pos < a.d_r_neg)
-		{
-			u_r = -a.d_r_neg;
-		}
-		ENV.state.vel[0] += u_r;
-	}
-	else
-	{
-		if (a.d_c_pos < a.d_c_neg)
-		{
-			u_c = -a.d_c_neg;
-		}
-		ENV.state.vel[1] += u_c;
-	}
-
-	ENV.last_action = a;
-	ENV.last_action_probs = a_probs;
+	traj.append(x, a_probs, reward_t);
 }
 
 unsigned training_step = 0;

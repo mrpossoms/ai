@@ -19,7 +19,7 @@ namespace net
 
 	void train_policy_gradient(const RL::Trajectory& traj, const hyper_parameters& hp={});
 
-	torch::Tensor act_probs(const RL::State& x);
+	torch::Tensor act_probs(torch::Tensor x);
 
-	RL::Action act(torch::Tensor& probs);
+	RL::Action act(torch::Tensor probs);
 }

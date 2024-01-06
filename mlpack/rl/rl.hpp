@@ -25,7 +25,7 @@ namespace RL
 
 	union Action
 	{
-		float u[4];
+		float u[4] = {};
 		struct
 		{
 			float d_r_pos;
