@@ -11,10 +11,10 @@ FetchContent_Declare(
   GIT_TAG        master
 )
 
-FetchContent_MakeAvailable(spare-time)
+FetchContent_MakeAvailable(ascii-chart)
 
 add_executable(approx sin.cpp)
-target_include_directories(approx PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
+target_include_directories(approx PUBLIC ${CMAKE_BINARY_DIR}/_deps/ascii-chart-src/include)
 target_link_libraries(approx "${TORCH_LIBRARIES}")
 target_link_libraries(approx ncurses pthread m)
 set_property(TARGET approx PROPERTY CXX_STANDARD 17)

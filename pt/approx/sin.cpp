@@ -1,18 +1,43 @@
-// #include <mlpack.hpp>
 #include <torch/torch.h>
 #include <ascii/ascii.h>
 
-// using namespace mlpack;
+struct FFN : torch::nn::Module
+{
+	FFN()
+	{
+		fc[0] = register_module("fc1", torch::nn::Linear(1, 3));
+		fc[1] = register_module("fc2", torch::nn::Linear(3, 3));
+		fc[2] = register_module("fc3", torch::nn::Linear(3, 1));
+		fc[3] = register_module("fc4", torch::nn::Linear(1, 1));
+	}
 
+	torch::Tensor forward(torch::Tensor x)
+	{
+		x = torch::sigmoid(fc[0]->forward(x));
+		x = fc[1]->forward(x);
+		x = fc[2]->forward(x);
+		x = fc[3]->forward(x);
+		return x;
+	}
+
+	torch::nn::Linear fc[4] = {{nullptr}, {nullptr}, {nullptr}, {nullptr}};
+};
+
+void print_network_details(const FFN& model)
+{
+	for (auto& p : model.parameters())
+	{
+		std::cout << "-------------" << std::endl;
+		std::cout << p << std::endl;
+	}
+}
 
 int main (int argc, const char* argv[])
 {
 	const auto N = 1024;
 
-	// arma::mat X(1, N);
-	// arma::mat Y(1, N);
-	auto X = torch::zeros({N});
-	auto Y = torch::zeros({N});
+	auto X = torch::zeros({N, 1});
+	auto Y = torch::zeros({N, 1});
 
 	for (unsigned i = 0; i < N; i++)
 	{
@@ -28,72 +53,48 @@ int main (int argc, const char* argv[])
 	// Number of data points in each iteration of SGD
 	const size_t BATCH_SIZE = 1;//1024;
 	// Allow up to 50 epochs, unless we are stopped early by EarlyStopAtMinLoss.
-	const int EPOCHS = 100 * X.n_cols;
+	const int EPOCHS = 10 * X.size(0);
 
+	FFN model;
 
-	FFN<HuberLoss> model;
-	model.Add<Linear>(2);
-	model.Add<Sigmoid>();
-	model.Add<Linear>(2);
-	model.Add<Linear>(1);
+	torch::optim::Adam optimizer(model.parameters(), torch::optim::AdamOptions(STEP_SIZE));
 
-	// ens::Adam optimizer;
-	ens::Adam optimizer(
-		STEP_SIZE,  // Step size of the optimizer.
-		BATCH_SIZE, // Batch size. Number of data points that are used in each
-		            // iteration.
-		0.9,        // Exponential decay rate for the first moment estimates.
-		0.999, // Exponential decay rate for the weighted infinity norm estimates.
-		1e-8,  // Value used to initialise the mean squared gradient parameter.
-		EPOCHS, // Max number of iterations.
-		1e-8,           // Tolerance.
-		true);
+	for (int i = 0; i < EPOCHS; i++)
+	{
+		// Reset gradients.
+		optimizer.zero_grad();
+		// Forward pass.
+		auto output = model.forward(X);
+		// Calculate loss.
+		auto loss = torch::mse_loss(output, Y);
+		// Backward pass.
+		loss.backward();
+		// Update parameters.
+		optimizer.step();
 
-	// Declare callback to store best training weights.
-	ens::StoreBestCoordinates<arma::mat> bestCoordinates;
+		if (i % 100 == 0)
+		std::cout << "Epoch: " << i << " Loss: " << loss.item<float>() << std::endl;
+	}
 
-	// Train neural network. If this is the first iteration, weights are
-	// random, using current values as starting point otherwise.
-	model.Train(
-		X,
-		Y,
-		optimizer,
-		ens::PrintLoss(),
-		ens::ProgressBar(),
-		// Stop the training using Early Stop at min loss.
-		ens::EarlyStopAtMinLoss(
-		  [&](const arma::mat& /* param */)
-		  {
-		    double validationLoss = model.Evaluate(X, Y);
-		    std::cout << "Validation loss: " << validationLoss << "."
-		        << std::endl;
-		    return validationLoss;
-		  }),
-		// Store best coordinates (neural network weights)
-		bestCoordinates);
-
-	std::cout << std::endl;
-
-	print_network_details<>(model);
+	print_network_details(model);
 
 	std::unordered_map<std::string, std::vector<double>> traces;
 
-	arma::mat h_mat(1, N), t_mat(1, N);
+	auto t_mat = torch::zeros(N);
 
 	for (unsigned i = 0; i < N; i++)
 	{
 		auto p = i / (float)N;
 		auto t = p * 2 * M_PI;
-		t_mat.row(0)[i] = t;
+		t_mat[i] = t;
 	}
 
-	model.Predict(X, h_mat);
+	auto h_mat = model.forward(X);
 
 	for (unsigned i = 0; i < 100; i++)
 	{
-		traces["gt"].push_back(Y.col(i * 10)[0]);
-		traces["h"].push_back(h_mat.col(i * 10)[0]);
-		// traces["x"].push_back(X.col(i * 10)[0]);
+		traces["gt"].push_back(Y[i * 10].item<float>());
+		traces["h"].push_back(h_mat[i * 10].item<float>());
 	}	
 
 	ascii::Asciichart chart(traces);
