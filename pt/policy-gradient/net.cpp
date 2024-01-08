@@ -26,11 +26,11 @@ struct Net : torch::nn::Module
 
 	torch::Tensor forward(torch::Tensor x)
 	{
-		auto a0 = torch::leaky_relu(layers[0]->forward(x));
-		auto a1 = torch::leaky_relu(layers[1]->forward(a0));
-		auto a2 = torch::softmax(layers[2]->forward(a1), 1);
+		x = torch::leaky_relu(layers[0]->forward(x));
+		x = torch::leaky_relu(layers[1]->forward(x));
+		x = torch::softmax(layers[2]->forward(x), 1);
 
-		return a2;
+		return x;
 	}
 
 	torch::nn::Linear layers[3] = {
@@ -46,11 +46,10 @@ std::unique_ptr<torch::optim::Adam> optimizer;
 void net::init(size_t observation_size, size_t action_size)
 {
 	model = Net(observation_size, action_size);
-	model.train();
 
 	optimizer = std::make_unique<torch::optim::Adam>(
 		model.parameters(),
-		torch::optim::AdamOptions(2e-4).betas(std::make_tuple(0.5, 0.5))
+		torch::optim::AdamOptions(0.001)
 	);
 
 	// torch::autograd::AnomalyMode::set_enabled(true);
@@ -74,25 +73,32 @@ void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_par
 {
 	// model.train();
 
-	optimizer->zero_grad();
+
+	torch::optim::Adam optimizer(
+		model.parameters(),
+		torch::optim::AdamOptions(0.01)
+	);
+
+	optimizer.zero_grad();
 
 	float R = 0;
 
 	std::vector<float> returns;
 	for (int i = traj.rewards.size() - 1; i >= 0; i--)
 	{
-		returns.push_back(traj.rewards[i] * pow(0.999f, i));
+		R = traj.rewards[i] + 0.999f * R;
+		returns.push_back(R);
 	}
 
 	torch::Tensor returns_tensor = torch::tensor(returns);
-	// returns_tensor = (returns_tensor - returns_tensor.mean()) / (returns_tensor.std() + 1e-8);
+	returns_tensor = (returns_tensor - returns_tensor.mean()) / (returns_tensor.std() + 1e-8);
 
 	// std::cout << "RRRRRRRRRRRRRRRRRRRRRRR" << std::endl;
 	// std::cout << returns_tensor << std::endl;
 	assert(returns_tensor.isnan().sum().item<int>() == 0);
 
-	std::vector<torch::Tensor> policy_loss;
-	// torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 1, 4});
+	// std::vector<torch::Tensor> policy_loss;
+	torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 1, 4});
 
 	for (int i = 0; i < traj.rewards.size(); i++)
 	{
@@ -100,30 +106,37 @@ void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_par
 		// std::cout << prob << std::endl;
 
 		// should be -log()
-		policy_loss.push_back(-torch::log(prob) * returns_tensor[i]);
+		// policy_loss.push_back(-torch::log(prob) * returns_tensor[i]);
+		
+		policy_loss[i] = -torch::log(prob) * returns_tensor[i];
 	}
 
 	// std::cout << "-------------------" << std::endl;
 	// std::cout << policy_loss << std::endl;
 
-	torch::Tensor policy_loss_tensor = torch::stack(policy_loss);
-	auto policy_loss_mu = policy_loss_tensor.sum(); // / traj.rewards.size();
-	policy_loss_mu.requires_grad_(true);
+	// torch::Tensor policy_loss_tensor = torch::stack(policy_loss);
+	// auto policy_loss_mu = policy_loss_tensor.mean(); // / traj.rewards.size();
+	// policy_loss_mu.requires_grad_(true);
+	
+	auto policy_loss_mu = policy_loss.sum();
+	// policy_loss_mu.requires_grad_(true);
 
-	std::cout << policy_loss_mu << std::endl;
+	// auto policy_loss_mu = (-torch::log(traj.action_probs[0]) * returns_tensor[0]).mean();
+
+	// std::cout << policy_loss_mu << std::endl;
 
 	// assert policy_loss_tensor is not nan
 	assert(!std::isnan(policy_loss_mu.template item<float>()));
 	
 	// copilot generated this, check later
 	policy_loss_mu.backward();
-	optimizer->step();
+	optimizer.step();
 
 	// assert that model parameters are not nan
 	for (auto& param : model.parameters())
 	{
-		std::cout << "---------" << std::endl;
-		std::cout << param << std::endl;
+		// std::cout << "---------" << std::endl;
+		// std::cout << param << std::endl;
 		assert(param.isnan().sum().item<int>() == 0);
 	}
 
@@ -149,7 +162,14 @@ void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_par
 
 torch::Tensor net::act_probs(torch::Tensor x)
 {
-	return model.forward(x);
+	auto probs = model.forward(x);
+
+	// float epsilon
+	auto eps = std::numeric_limits<float>::epsilon();
+
+	probs = probs.clamp(eps, 1.f - eps);
+
+	return probs;
 }
 
 RL::Action net::act(torch::Tensor probs)

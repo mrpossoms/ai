@@ -65,8 +65,8 @@ int main (int argc, const char* argv[])
 		optimizer.zero_grad();
 		// Forward pass.
 		auto output = model.forward(X);
-		// Calculate loss.
-		auto loss = torch::mse_loss(output, Y);
+		// Calculate loss. MSE
+		auto loss = torch::pow(output - Y, 2).mean();
 		// Backward pass.
 		loss.backward();
 		// Update parameters.

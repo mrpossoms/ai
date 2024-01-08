@@ -113,30 +113,6 @@ static inline const char* sampler(int row, int col)
 	return tmp;
 }
 
-void spawn(float p[2])
-{
-    std::uniform_int_distribution<> r_dist(1, term.max_rows-1);
-    std::uniform_int_distribution<> c_dist(0, term.max_cols-1);
-
-	p[0] = r_dist(gen);
-	p[1] = c_dist(gen);	
-}
-
-void reset()
-{
-	// srand(0);
-	ENV.goal[0] = 10;
-	ENV.goal[1] = 12;
-	ENV.position[0] = 40;
-	ENV.position[1] = 21;
-	spawn(ENV.goal);
-	spawn(ENV.position);
-	ENV.vel[0] = randf();
-	ENV.vel[1] = randf();
-
-	memset(ENV.trace, 0, sizeof(ENV.trace));
-}
-
 int playing()
 {
 	// return 0 when the game loop should terminate

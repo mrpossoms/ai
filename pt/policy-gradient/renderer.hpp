@@ -1,10 +1,11 @@
 #pragma once
 #include <unistd.h>
+#include "rl.hpp"
 
 extern int TG_TIMEOUT;
 extern bool PLAYING;
 
-struct Renderer
+struct Environment
 {
 	struct State
 	{
@@ -20,8 +21,18 @@ struct Renderer
 
 	size_t cols();
 
-	Renderer();
-	~Renderer();
+	Environment();
+	~Environment();
 
-	void render(State& state);
+	State state;
+
+	void reset();
+
+	float distance_to_goal();
+
+	void spawn(float p[2]);
+
+	float step_reward(float u[2]);
+
+	void render();
 };
