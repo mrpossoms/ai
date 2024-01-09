@@ -69,18 +69,8 @@ bool net::loaded()
 	return LOADED;
 }
 
-void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_parameters& hp)
+torch::Tensor net::policy_loss(const RL::Trajectory& traj)
 {
-	// model.train();
-
-
-	torch::optim::Adam optimizer(
-		model.parameters(),
-		torch::optim::AdamOptions(0.01)
-	);
-
-	optimizer.zero_grad();
-
 	float R = 0;
 
 	std::vector<float> returns;
@@ -118,18 +108,34 @@ void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_par
 	// auto policy_loss_mu = policy_loss_tensor.mean(); // / traj.rewards.size();
 	// policy_loss_mu.requires_grad_(true);
 	
-	auto policy_loss_mu = policy_loss.sum();
+	return policy_loss.sum();
+}
+
+void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_parameters& hp)
+{
+	// model.train();
+
+
+	torch::optim::Adam optimizer(
+		model.parameters(),
+		torch::optim::AdamOptions(0.01)
+	);
+
+	optimizer.zero_grad();
+
+
 	// policy_loss_mu.requires_grad_(true);
 
 	// auto policy_loss_mu = (-torch::log(traj.action_probs[0]) * returns_tensor[0]).mean();
 
 	// std::cout << policy_loss_mu << std::endl;
+	auto loss = policy_loss(traj);
 
 	// assert policy_loss_tensor is not nan
-	assert(!std::isnan(policy_loss_mu.template item<float>()));
+	assert(!std::isnan(loss.template item<float>()));
 	
 	// copilot generated this, check later
-	policy_loss_mu.backward();
+	loss.backward();
 	optimizer.step();
 
 	// assert that model parameters are not nan
