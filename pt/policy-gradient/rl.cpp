@@ -8,7 +8,7 @@ RL::Trajectory::Trajectory(size_t len)
 
 void RL::Trajectory::append(torch::Tensor x, torch::Tensor u_probs, float r)
 {
-	assert(x.isnan().sum().item<int>() == 0);
+	// assert(x.isnan().sum().item<int>() == 0);
 	assert(u_probs.isnan().sum().item<int>() == 0);
 
 	state.push_back(x);

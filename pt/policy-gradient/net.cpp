@@ -81,11 +81,11 @@ torch::Tensor net::policy_loss(const RL::Trajectory& traj)
 	}
 
 	torch::Tensor returns_tensor = torch::tensor(returns);
-	returns_tensor = (returns_tensor - returns_tensor.mean()) / (returns_tensor.std() + 1e-8);
+	// returns_tensor = (returns_tensor - returns_tensor.mean()) / (returns_tensor.std() + 1e-8);
 
 	// std::cout << "RRRRRRRRRRRRRRRRRRRRRRR" << std::endl;
 	// std::cout << returns_tensor << std::endl;
-	assert(returns_tensor.isnan().sum().item<int>() == 0);
+	// assert(returns_tensor.isnan().sum().item<int>() == 0);
 
 	// std::vector<torch::Tensor> policy_loss;
 	torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 1, 4});

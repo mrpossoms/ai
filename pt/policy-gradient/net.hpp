@@ -17,7 +17,7 @@ namespace net
 
 	bool loaded();
 
-	static torch::Tensor policy_loss(const RL::Trajectory& traj);
+	torch::Tensor policy_loss(const RL::Trajectory& traj);
 
 	void train_policy_gradient(const RL::Trajectory& traj, const hyper_parameters& hp={});
 
