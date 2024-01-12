@@ -74,7 +74,7 @@ torch::Tensor net::policy_loss(const RL::Trajectory& traj)
 	float R = 0;
 
 	std::vector<float> returns;
-	for (int i = traj.rewards.size() - 1; i >= 0; i--)
+	for (int i = 0; i <= traj.rewards.size(); i++)
 	{
 		R = traj.rewards[i] + 0.999f * R;
 		returns.push_back(R);
@@ -88,7 +88,9 @@ torch::Tensor net::policy_loss(const RL::Trajectory& traj)
 	// assert(returns_tensor.isnan().sum().item<int>() == 0);
 
 	// std::vector<torch::Tensor> policy_loss;
-	torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 1, 4});
+	// torch::Tensor policy_loss = torch::zeros({traj.rewards.size(), 1, 4});
+
+	std::vector<torch::Tensor> losses;
 
 	for (int i = 0; i < traj.rewards.size(); i++)
 	{
@@ -98,7 +100,8 @@ torch::Tensor net::policy_loss(const RL::Trajectory& traj)
 		// should be -log()
 		// policy_loss.push_back(-torch::log(prob) * returns_tensor[i]);
 		
-		policy_loss[i] = -torch::log(prob) * returns_tensor[i];
+		// policy_loss[i] = -torch::log(prob) * returns_tensor[i];
+		losses.push_back(-torch::log(prob) * returns_tensor[i]);
 	}
 
 	// std::cout << "-------------------" << std::endl;
@@ -107,8 +110,11 @@ torch::Tensor net::policy_loss(const RL::Trajectory& traj)
 	// torch::Tensor policy_loss_tensor = torch::stack(policy_loss);
 	// auto policy_loss_mu = policy_loss_tensor.mean(); // / traj.rewards.size();
 	// policy_loss_mu.requires_grad_(true);
-	
-	return policy_loss.sum();
+	return torch::cat(losses).sum();
+
+
+
+	// return policy_loss.sum();
 }
 
 void net::train_policy_gradient(const RL::Trajectory& traj, const net::hyper_parameters& hp)

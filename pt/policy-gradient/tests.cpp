@@ -35,8 +35,6 @@ void check_positive_reinforcement()
 		probs[0][3] += 2;
 		probs = torch::softmax(probs, 1);
 		std::cout << "------------" << std::endl;
-		std::cout << probs << std::endl;
-
 		traj.append({}, probs, 1);
 
 		auto loss = net::policy_loss(traj);
@@ -52,7 +50,8 @@ void check_positive_reinforcement()
 		probs[0][3] += 2;
 		probs = torch::softmax(probs, 1);
 
-		std::cout << probs << old_probs << std::endl;		
+		std::cout << "new probs: " << probs << std::endl;
+		std::cout << "old probs: " << old_probs << std::endl;		
 			
 		assert(probs[0][3].item<float>() >= old_probs[0][3].item<float>());
 	}
