@@ -11,7 +11,7 @@ def sim_track(s_t, a_t) -> tuple[np.array, float]:
     else:
         s_t1 = s_t - 0.05
 
-    return s_t1, 1-np.abs(s_t1)
+    return s_t1, s_t**2 - s_t1**2#1 - (s_t1**2)
 
 def softmax(a) -> np.array:
     try:
@@ -24,7 +24,7 @@ def softmax(a) -> np.array:
 def P(W, s_t) -> np.array:
     return softmax(W @ s_t)
 
-def grad(W, s_t, a_t, pr_t, eps=0.1) -> np.array:
+def grad(W, s_t, a_t, pr_t, eps=0.001) -> np.array:
     g = np.zeros((W.shape[0], W.shape[1]))
     W_0 = W.copy()
 
@@ -35,10 +35,10 @@ def grad(W, s_t, a_t, pr_t, eps=0.1) -> np.array:
         for ci in range(W.shape[1]):
             d = np.zeros(W.shape)
             d[ri,ci] = eps
-            pr = np.log(P(W + d, s_t))            
+            pr = P(W + d, s_t)       
             g[ri,ci] = (pr.flatten()[a_t] - pr_t.flatten()[a_t]) / eps
                 
-    return g
+    return g / pr_t.flatten()[a_t]
 
 def run(s_t, W, sim=sim_track, epochs=10, stochastic=True):
     S,A,Pr,R = [],[],[],[]
@@ -56,6 +56,7 @@ def run(s_t, W, sim=sim_track, epochs=10, stochastic=True):
 # W = np.array([[0.1],[-0.1]])
 # S_0 = np.array([[-2]]) #np.random.random((1,1))
 # Pr = []
+# import pdb; pdb.set_trace()
 # for i in range(100):
 #     pr = P(W, S_0)
 #     Pr.append(pr)
@@ -70,9 +71,39 @@ def run(s_t, W, sim=sim_track, epochs=10, stochastic=True):
 # plt.show()
 # exit(0)
 # ---- Sim stuff below ----
-W = np.random.randn(2,1)
-S_0 = np.array([[-2]]) #np.random.random((1,1))
+def vis(W, R=[]):
+    fig = plt.figure()
+
+    def update(frame, S_t, plot):
+        plot[0].set_data([S_t[frame][0,0]], [0])
+
+        return [plot]
+
+    ax = fig.add_subplot(1, 2, 1)
+    ax.plot(R)
+
+    # Show cart approaching from left
+    S_t,_,_,_ = run(np.array([[-2]]), W, epochs=200, stochastic=False)
+    ax = fig.add_subplot(2, 2, 2)
+    ax.set_xlim(-10, 10)
+
+    point_plt = ax.plot([S_t[0][0,0]], [0], color='r', marker='o', markersize=5)
+    ani1 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
+
+    # show cart approaching from right
+    S_t,_,_,_ = run(np.array([[2]]), W, epochs=200, stochastic=False)
+    ax = fig.add_subplot(2, 2, 4)
+    ax.set_xlim(-10, 10)
+
+    point_plt = ax.plot([S_t[0][0,0]], [0], color='r', marker='o', markersize=5)
+    ani2 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
+    plt.show()
+
+W = np.array([[0.1, -0.1]]).T
+S_0 = np.random.randn(1,1) * 5
 print(W)
+
+vis(W)
 # _,_,_,R_0 = run(S_0.copy(), W, epochs=50, stochastic=True)
 
 # show the reward traj before optimizing
@@ -82,37 +113,26 @@ print(W)
 # plt.ylabel("Reward")
 # plt.show()
 # print(W)
-a = 0.001
+a = 0.005
 # import pdb; pdb.set_trace()
 
 R = []
+# import pdb; pdb.set_trace()
 for e in range(500):
     # S = S_0.copy()
     g = W * 0
     t = 0
-    R_e = 0
-    for s_t, a_t, pr_t, r_t in zip(*run(S_0.copy(), W, epochs=50)):
-        R_e += r_t #* 0.99**t
-        g += grad(W, s_t, a_t, pr_t) * R_e
+    r_e = 0
+    S_0 = np.random.randn(1,1) * 5
+    S_e,A_e,Pr_e,R_e = run(S_0, W, epochs=50)
+    for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
+        r_e += r_t * 0.999**t
+        g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
         t += 1
-    # g /= len(S_0)
+    g /= len(A_e)
     W += g * a
     W /= np.linalg.norm(W)
-    R.append(R_e)
+    R.append(r_e)
 
 print(W)
-# _,_,_,R_e = run(S_0.copy(), W, epochs=50, stochastic=True)
-# plt.title("After Optimization")
-# plt.xlabel("Time-step")
-# plt.ylabel("Reward")
-# plt.plot(R)
-# plt.show()
-
-ax = plt.subplot(111)
-ax.plot(R, label='Reward')
-# ax.plot(R_e, label='After')
-plt.title("Reward trajectory")
-plt.xlabel("Epoch")
-plt.ylabel("Reward")
-plt.legend()
-plt.show()
+vis(W, R=R)
