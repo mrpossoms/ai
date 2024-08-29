@@ -53,23 +53,6 @@ def run(s_t, W, sim=sim_track, epochs=10, stochastic=True):
         s_t = s_t_1
     return S,A,Pr,R
 
-# W = np.array([[0.1],[-0.1]])
-# S_0 = np.array([[-2]]) #np.random.random((1,1))
-# Pr = []
-# import pdb; pdb.set_trace()
-# for i in range(100):
-#     pr = P(W, S_0)
-#     Pr.append(pr)
-#     g = grad(W, S_0, 0, pr)
-#     W += g * 0.01
-# Pr = np.array(Pr)
-# plt.plot(Pr[:,0], label='a_0')
-# plt.plot(Pr[:,1], label='a_1')
-# plt.title("Prob of action a_0")
-# plt.xlabel("Time-step")
-# plt.ylabel("Probablity")
-# plt.show()
-# exit(0)
 # ---- Sim stuff below ----
 def vis(W, R=[]):
     fig = plt.figure()
@@ -99,40 +82,88 @@ def vis(W, R=[]):
     ani2 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
     plt.show()
 
-W = np.array([[0.1, -0.1]]).T
-S_0 = np.random.randn(1,1) * 5
-print(W)
-
-vis(W)
-# _,_,_,R_0 = run(S_0.copy(), W, epochs=50, stochastic=True)
-
-# show the reward traj before optimizing
-# plt.plot(R)
-# plt.title("Before Optimization")
-# plt.xlabel("Time-step")
-# plt.ylabel("Reward")
-# plt.show()
-# print(W)
-a = 0.005
-# import pdb; pdb.set_trace()
-
-R = []
-# import pdb; pdb.set_trace()
-for e in range(500):
-    # S = S_0.copy()
-    g = W * 0
-    t = 0
-    r_e = 0
+if __name__ == '__main__':
+    W = np.array([[0.1, -0.1]]).T
     S_0 = np.random.randn(1,1) * 5
-    S_e,A_e,Pr_e,R_e = run(S_0, W, epochs=50)
-    for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
-        r_e += r_t * 0.999**t
-        g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
-        t += 1
-    g /= len(A_e)
-    W += g * a
-    W /= np.linalg.norm(W)
-    R.append(r_e)
+    print(W)
 
-print(W)
-vis(W, R=R)
+    vis(W)
+    # _,_,_,R_0 = run(S_0.copy(), W, epochs=50, stochastic=True)
+
+    # show the reward traj before optimizing
+    # plt.plot(R)
+    # plt.title("Before Optimization")
+    # plt.xlabel("Time-step")
+    # plt.ylabel("Reward")
+    # plt.show()
+    # print(W)
+    a = 0.005
+    # import pdb; pdb.set_trace()
+
+    R = []
+    # import pdb; pdb.set_trace()
+    for e in range(5000):
+        # S = S_0.copy()
+        g = W * 0
+        t = 0
+        r_e = 0
+        S_0 = np.random.randn(1,1) * 5
+        S_e,A_e,Pr_e,R_e = run(S_0, W, epochs=50, stochastic=False)
+        for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
+            r_e += r_t * 0.999**t
+            g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
+            t += 1
+        g /= len(A_e)
+        W += g * a
+        W /= np.linalg.norm(W)
+        R.append(r_e)
+
+    print(W)
+    vis(W, R=R)
+
+def test_convergence():
+    W = np.array([[0.1],[-0.1]])
+    S_0 = np.array([[-2]]) #np.random.random((1,1))
+
+    pr0 = P(W, S_0)
+    a0 = np.argmax(pr0).flatten()
+    _,r0 = sim_track(S_0, a0)
+
+    import pdb; pdb.set_trace()
+    W += grad(W, S_0, a0, pr0) * r0
+
+    pr1 = P(W, S_0)
+    a1 = np.argmax(pr1).flatten()
+    _,r1 = sim_track(S_0, a1)
+    a1 = np.argmax(pr1).flatten()
+
+    assert(r1 > r0)
+
+
+
+    # plt.plot(Pr[:,0], label='a_0')
+    # plt.plot(Pr[:,1], label='a_1')
+    # plt.title("Prob of action a_0")
+    # plt.xlabel("Time-step")
+    # plt.ylabel("Probablity")
+    # plt.show()
+
+def test_gradient():
+    W = np.array([[0.1],[-0.1]])
+    S_0 = np.array([[-2]]) #np.random.random((1,1))
+    Pr = []
+    for i in range(100):
+        pr = P(W, S_0)
+        Pr.append(pr)
+        g = grad(W, S_0, 0, pr) * 0.005
+        W += g * 0.01
+    Pr = np.array(Pr)
+
+    assert(Pr[0,0] < Pr[-1,0])
+
+    # plt.plot(Pr[:,0], label='a_0')
+    # plt.plot(Pr[:,1], label='a_1')
+    # plt.title("Prob of action a_0")
+    # plt.xlabel("Time-step")
+    # plt.ylabel("Probablity")
+    # plt.show()
