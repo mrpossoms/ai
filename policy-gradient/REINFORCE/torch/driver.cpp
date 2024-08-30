@@ -10,7 +10,7 @@
 
 Environment env;
 
-RL::Trajectory traj(128);
+std::vector<RL::Trajectory::Frame> traj;
 
 int playing()
 {
@@ -45,15 +45,13 @@ void sim_step()
 	auto x = get_state_tensor();
 	auto a_probs = net::act_probs(x); //.perturb(1.0f, 0.1f));
 	// std::cout << "x: " << x << " | u: " << a_probs << std::endl;
-	auto a = net::act(a_probs.clone().detach());
+	auto a = net::act(a_probs, false);
 
 	const auto k_speed = 0.1f;
 
-	auto max_idx = torch::argmax(a_probs).item<int>();
-
 	float u[2] = {};
 
-	switch(max_idx)
+	switch(a)
 	{
 		case 0: u[0] += k_speed; break;
 		case 1: u[0] += -k_speed; break;
@@ -63,7 +61,7 @@ void sim_step()
 
 	auto reward_t = env.step_reward(u);
 
-	traj.append(x, a_probs, reward_t);
+	traj.push_back({x, a_probs, (unsigned)a, reward_t});
 }
 
 unsigned episode = 0;
@@ -83,17 +81,17 @@ void update()
 	}
 	else
 	{
-		if (traj.full())
+		if (traj.size() >= 128)
 		{
-			rewards += traj.R();
+			rewards += RL::Trajectory::R(traj);
 
-			if (episode % 1000 == 0)
+			if (episode % 100 == 0)
 			{
 				std::cout << rewards / 1000.f << " ========================" << std::endl;
 				rewards = 0;
 			}
 
-			net::train_policy_gradient(traj, net::hyper_parameters{(unsigned)traj.rewards.size(), 0, 0.001});
+			net::train_policy_gradient(traj, net::hyper_parameters{(unsigned)traj.size(), 0, 0.001});
 			episode++;
 
 			env.reset();

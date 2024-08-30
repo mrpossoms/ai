@@ -5,43 +5,69 @@ import matplotlib.animation as animation
 
 np.seterr(all='raise')
 
-def sim_track(s_t, a_t) -> tuple[np.array, float]:
-    if a_t == 0:
-        s_t1 = s_t + 0.05
-    else:
-        s_t1 = s_t - 0.05
+class Environment:
+    class Track:
+        def __init__(self):
+            self.state = self.make_state()
 
-    return s_t1, s_t[0,0]**2 - s_t1[0,0]**2#1 - (s_t1**2)
+        @property
+        def epochs(self) -> int:
+            return 6000
 
-def track_X(x=None, sigma=1):
-    if x is not None:
-        return np.array([[x]])
-    else:
-        return np.random.randn(1,1) * sigma
+        @property
+        def state_action_size(self) -> tuple[int,int]:
+            return 1, 2
+
+        def make_state(self, x=None, sigma=1):
+            if x is not None:
+                return np.array([[x]])
+            else:
+                return np.random.randn(1,1) * sigma
+
+        def step(self, action:int) -> tuple[np.array, float]:
+            s_t = self.state
+            if action == 0:
+                self.state = s_t + 0.05
+            else:
+                self.state = s_t - 0.05
+
+            return self.state, s_t[0,0]**2 - self.state[0,0]**2
+
+    class Cart:
+        def __init__(self):
+            self.state = self.make_state()
+
+        @property
+        def epochs(self) -> int:
+            return 20_000
+
+        @property
+        def state_action_size(self) -> tuple[int,int]:
+            return 2, 2
+
+        def make_state(self, x=None, sigma=1):
+            if x is not None:
+                return np.array([[x], [0]])
+            else:
+                return np.random.randn(2,1) * sigma
+
+        def step(self, action:int) -> tuple[np.array, float]:
+            s_t = self.state
+            stm = np.array([
+                [1, 0.1],
+                [0,   1],
+            ])
+            self.state = stm @ s_t
+
+            if action == 0:
+                self.state[0,0] = s_t[0,0] + 0.05
+            else:
+                self.state[1,0] = s_t[1,0] - 0.05
+
+            return self.state, s_t[0,0]**2 - self.state[0,0]**2
 
 def track_policy_init() -> np.array:
     return np.random.randn(2,1) * 0.1
-
-def sim_cart(s_t, a_t) -> tuple[np.array, float]:
-    stm = np.array([
-        [1, 0.1],
-        [0,   1],
-    ])
-
-    s_t1 = stm @ s_t
-
-    if a_t == 0:
-        s_t1[0,0] += 0.1
-    else:
-        s_t1[1,0] -= 0.1
-
-    return s_t1, s_t[0,0]**2 - s_t1[0,0]**2
-
-def cart_X(x=None, sigma=1):
-    if x is not None:
-        return np.array([[x], [0]])
-    else:
-        return np.random.randn(2,1) * sigma
 
 def cart_policy_init() -> np.array:
     return np.random.randn(2,2) * 0.1
@@ -73,21 +99,20 @@ def grad(W, s_t, a_t, pr_t, eps=0.001) -> np.array:
                 
     return g / pr_t.flatten()[a_t]
 
-def run(s_t, W, sim=sim_track, epochs=10, stochastic=True):
+def run(W, env, epochs=10, stochastic=True):
     S,A,Pr,R = [],[],[],[]
     for t in range(epochs):
-        Pr.append(P(W, s_t))
+        Pr.append(P(W, env.state))
         a = np.argmax(Pr[-1].flatten())
         if stochastic:
             a = np.random.choice(list(range(2)), p=Pr[-1].flatten())
-
-        s_t_1, r_t = sim(s_t, a)
-        S.append(s_t.copy()); A.append(a); R.append(r_t)
-        s_t = s_t_1
+        S.append(env.state.copy());
+        s_t_1, r_t = env.step(a)
+        A.append(a); R.append(r_t)
     return S,A,Pr,R
 
 # ---- Sim stuff below ----
-def vis(W, R=[], sim=sim_track, state_init=track_X):
+def vis(W, env, R=[]):
     fig = plt.figure()
 
     def update(frame, S_t, plot):
@@ -99,7 +124,8 @@ def vis(W, R=[], sim=sim_track, state_init=track_X):
     ax.plot(R)
 
     # Show cart approaching from left
-    S_t,_,_,_ = run(state_init(-2), W, sim=sim, epochs=200, stochastic=False)
+    env.state = env.make_state(-2)
+    S_t,_,_,_ = run(W, env, epochs=200, stochastic=False)
     ax = fig.add_subplot(2, 2, 2)
     ax.set_xlim(-10, 10)
 
@@ -107,7 +133,8 @@ def vis(W, R=[], sim=sim_track, state_init=track_X):
     ani1 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
 
     # show cart approaching from right
-    S_t,_,_,_ = run(state_init(2), W, sim=sim, epochs=200, stochastic=False)
+    env.state = env.make_state(2)
+    S_t,_,_,_ = run(W, env, epochs=200, stochastic=False)
     ax = fig.add_subplot(2, 2, 4)
     ax.set_xlim(-10, 10)
 
@@ -115,20 +142,20 @@ def vis(W, R=[], sim=sim_track, state_init=track_X):
     ani2 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
     plt.show()
 
-def train(sim=sim_track, state_init=track_X, policy_param_init=track_policy_init):
+def train(env=Environment.Track(), policy_param_init=track_policy_init):
     W = policy_param_init()
-    S_0 = state_init(sigma=5)
+    env.state = env.make_state(sigma=5)
     print(W)
 
-    vis(W, sim=sim, state_init=state_init)
-    a = 0.001
+    vis(W, env)
+    a = 0.0001
 
     R = []
-    for e in range(20_000):
+    for e in range(env.epochs):
         # S = S_0.copy()
-        S_0 = state_init(sigma=5)
+        env.state = env.make_state(sigma=5)
         g, t, r_e = W * 0, 0, 0
-        S_e,A_e,Pr_e,R_e = run(S_0, W, sim=sim, epochs=50, stochastic=False)
+        S_e,A_e,Pr_e,R_e = run(W, env, epochs=50, stochastic=True)
         for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
             r_e += r_t * 0.999**t
             g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
@@ -138,53 +165,29 @@ def train(sim=sim_track, state_init=track_X, policy_param_init=track_policy_init
 
         R.append(r_e)
         if e % 1000 == 0:
-            print(f"{e}/{5_000} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
+            print(f"{e}/{env.epochs} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
 
     print(W)
-    vis(W, R=R, sim=sim, state_init=state_init)
+    vis(W, env, R=np.convolve(R, np.ones(200)/200, mode='valid'))
 
 if __name__ == '__main__':
-    train(sim=sim_cart, state_init=cart_X, policy_param_init=cart_policy_init)
-    # W = np.random.randn(2,1) * 0.1
-    # S_0 = track_X(sigma=5)
-    # print(W)
+    train(Environment.Cart(), policy_param_init=cart_policy_init)
 
-    # vis(W)
-    # a = 0.001
-
-    # R = []
-    # for e in range(5_000):
-    #     # S = S_0.copy()
-    #     g, t, r_e = W * 0, 0, 0
-    #     S_0 = track_X(sigma=5)
-    #     S_e,A_e,Pr_e,R_e = run(S_0, W, epochs=50, stochastic=False)
-    #     for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
-    #         r_e += r_t * 0.999**t
-    #         g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
-    #         t += 1
-    #     g /= len(A_e)
-    #     W += g * a
-
-    #     R.append(r_e)
-    #     if e % 1000 == 0:
-    #         print(f"{e}/{5_000} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
-
-    # print(W)
-    # vis(W, R=R)
 
 def test_convergence():
     W = np.array([[0.1],[-0.1]])
-    S_0 = np.array([[-2]]) #np.random.random((1,1))
+    env = Environment.Track()
+    env.state = env.make_state(-2)
 
-    pr0 = P(W, S_0)
+    pr0 = P(W, env.state)
     a0 = np.argmax(pr0).flatten()
-    _,r0 = sim_track(S_0, a0)
+    _,r0 = env.step(a0)
 
-    W += grad(W, S_0, a0, pr0) * r0
+    W += grad(W, env.state, a0, pr0) * r0
 
-    pr1 = P(W, S_0)
+    pr1 = P(W, env.state)
     a1 = np.argmax(pr1).flatten()
-    _,r1 = sim_track(S_0, a1)
+    _,r1 = env.step(a1)
     a1 = np.argmax(pr1).flatten()
 
     assert(r1 > r0)

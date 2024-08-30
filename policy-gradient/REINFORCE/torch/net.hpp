@@ -17,11 +17,10 @@ namespace net
 
 	bool loaded();
 
-	torch::Tensor policy_loss(const RL::Trajectory& traj);
-
-	void train_policy_gradient(const RL::Trajectory& traj, const hyper_parameters& hp={});
+	void train_policy_gradient(const std::vector<RL::Trajectory::Frame>& traj, const hyper_parameters& hp={});
 
 	torch::Tensor act_probs(torch::Tensor x);
 
-	RL::Action act(torch::Tensor probs);
+	int act(torch::Tensor probs, bool stochastic=true);
+
 }

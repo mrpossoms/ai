@@ -33,19 +33,16 @@ namespace RL
 
 	struct Trajectory
 	{
-		std::vector<torch::Tensor> state;
-		std::vector<torch::Tensor> action_probs;
-		std::vector<float> rewards;
+		struct Frame
+		{
+			torch::Tensor state;
+			torch::Tensor action_probs;
+			// torch::Tensor action;
+			unsigned action_idx;
+			float reward;
+		};
 
-		Trajectory(size_t len=128);
-
-		void append(torch::Tensor x, torch::Tensor action_probs, float r);
-
-		float R(float gamma=0.999f);
-
-		bool full() const { return action_probs.size() >= action_probs.capacity(); }
-
-		void clear();
+		static float R(const std::vector<Frame>& T, float gamma=0.999f);
 	};
 
 }
