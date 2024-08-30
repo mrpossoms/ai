@@ -97,12 +97,12 @@ if __name__ == '__main__':
     # plt.ylabel("Reward")
     # plt.show()
     # print(W)
-    a = 0.005
+    a = 0.001
     # import pdb; pdb.set_trace()
 
     R = []
     # import pdb; pdb.set_trace()
-    for e in range(5000):
+    for e in range(5_000):
         # S = S_0.copy()
         g = W * 0
         t = 0
@@ -115,8 +115,11 @@ if __name__ == '__main__':
             t += 1
         g /= len(A_e)
         W += g * a
-        W /= np.linalg.norm(W)
+        # W /= np.linalg.norm(W)
         R.append(r_e)
+        if e % 1000 == 0:
+            print(f"{e}/{5_000} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
+            # print(W)
 
     print(W)
     vis(W, R=R)
