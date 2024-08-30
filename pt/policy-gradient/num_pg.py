@@ -11,7 +11,40 @@ def sim_track(s_t, a_t) -> tuple[np.array, float]:
     else:
         s_t1 = s_t - 0.05
 
-    return s_t1, s_t**2 - s_t1**2#1 - (s_t1**2)
+    return s_t1, s_t[0,0]**2 - s_t1[0,0]**2#1 - (s_t1**2)
+
+def track_X(x=None, sigma=1):
+    if x is not None:
+        return np.array([[x]])
+    else:
+        return np.random.randn(1,1) * sigma
+
+def track_policy_init() -> np.array:
+    return np.random.randn(2,1) * 0.1
+
+def sim_cart(s_t, a_t) -> tuple[np.array, float]:
+    stm = np.array([
+        [1, 0.1],
+        [0,   1],
+    ])
+
+    s_t1 = stm @ s_t
+
+    if a_t == 0:
+        s_t1[0,0] += 0.1
+    else:
+        s_t1[1,0] -= 0.1
+
+    return s_t1, s_t[0,0]**2 - s_t1[0,0]**2
+
+def cart_X(x=None, sigma=1):
+    if x is not None:
+        return np.array([[x], [0]])
+    else:
+        return np.random.randn(2,1) * sigma
+
+def cart_policy_init() -> np.array:
+    return np.random.randn(2,2) * 0.1
 
 def softmax(a) -> np.array:
     try:
@@ -49,12 +82,12 @@ def run(s_t, W, sim=sim_track, epochs=10, stochastic=True):
             a = np.random.choice(list(range(2)), p=Pr[-1].flatten())
 
         s_t_1, r_t = sim(s_t, a)
-        S.append(s_t.copy()); A.append(a); R.append(r_t[0,0])
+        S.append(s_t.copy()); A.append(a); R.append(r_t)
         s_t = s_t_1
     return S,A,Pr,R
 
 # ---- Sim stuff below ----
-def vis(W, R=[]):
+def vis(W, R=[], sim=sim_track, state_init=track_X):
     fig = plt.figure()
 
     def update(frame, S_t, plot):
@@ -66,7 +99,7 @@ def vis(W, R=[]):
     ax.plot(R)
 
     # Show cart approaching from left
-    S_t,_,_,_ = run(np.array([[-2]]), W, epochs=200, stochastic=False)
+    S_t,_,_,_ = run(state_init(-2), W, sim=sim, epochs=200, stochastic=False)
     ax = fig.add_subplot(2, 2, 2)
     ax.set_xlim(-10, 10)
 
@@ -74,7 +107,7 @@ def vis(W, R=[]):
     ani1 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
 
     # show cart approaching from right
-    S_t,_,_,_ = run(np.array([[2]]), W, epochs=200, stochastic=False)
+    S_t,_,_,_ = run(state_init(2), W, sim=sim, epochs=200, stochastic=False)
     ax = fig.add_subplot(2, 2, 4)
     ax.set_xlim(-10, 10)
 
@@ -82,47 +115,62 @@ def vis(W, R=[]):
     ani2 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
     plt.show()
 
-if __name__ == '__main__':
-    W = np.array([[0.1, -0.1]]).T
-    S_0 = np.random.randn(1,1) * 5
+def train(sim=sim_track, state_init=track_X, policy_param_init=track_policy_init):
+    W = policy_param_init()
+    S_0 = state_init(sigma=5)
     print(W)
 
-    vis(W)
-    # _,_,_,R_0 = run(S_0.copy(), W, epochs=50, stochastic=True)
-
-    # show the reward traj before optimizing
-    # plt.plot(R)
-    # plt.title("Before Optimization")
-    # plt.xlabel("Time-step")
-    # plt.ylabel("Reward")
-    # plt.show()
-    # print(W)
+    vis(W, sim=sim, state_init=state_init)
     a = 0.001
-    # import pdb; pdb.set_trace()
 
     R = []
-    # import pdb; pdb.set_trace()
-    for e in range(5_000):
+    for e in range(20_000):
         # S = S_0.copy()
-        g = W * 0
-        t = 0
-        r_e = 0
-        S_0 = np.random.randn(1,1) * 5
-        S_e,A_e,Pr_e,R_e = run(S_0, W, epochs=50, stochastic=False)
+        S_0 = state_init(sigma=5)
+        g, t, r_e = W * 0, 0, 0
+        S_e,A_e,Pr_e,R_e = run(S_0, W, sim=sim, epochs=50, stochastic=False)
         for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
             r_e += r_t * 0.999**t
             g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
             t += 1
         g /= len(A_e)
         W += g * a
-        # W /= np.linalg.norm(W)
+
         R.append(r_e)
         if e % 1000 == 0:
             print(f"{e}/{5_000} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
-            # print(W)
 
     print(W)
-    vis(W, R=R)
+    vis(W, R=R, sim=sim, state_init=state_init)
+
+if __name__ == '__main__':
+    train(sim=sim_cart, state_init=cart_X, policy_param_init=cart_policy_init)
+    # W = np.random.randn(2,1) * 0.1
+    # S_0 = track_X(sigma=5)
+    # print(W)
+
+    # vis(W)
+    # a = 0.001
+
+    # R = []
+    # for e in range(5_000):
+    #     # S = S_0.copy()
+    #     g, t, r_e = W * 0, 0, 0
+    #     S_0 = track_X(sigma=5)
+    #     S_e,A_e,Pr_e,R_e = run(S_0, W, epochs=50, stochastic=False)
+    #     for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
+    #         r_e += r_t * 0.999**t
+    #         g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
+    #         t += 1
+    #     g /= len(A_e)
+    #     W += g * a
+
+    #     R.append(r_e)
+    #     if e % 1000 == 0:
+    #         print(f"{e}/{5_000} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
+
+    # print(W)
+    # vis(W, R=R)
 
 def test_convergence():
     W = np.array([[0.1],[-0.1]])
@@ -132,7 +180,6 @@ def test_convergence():
     a0 = np.argmax(pr0).flatten()
     _,r0 = sim_track(S_0, a0)
 
-    import pdb; pdb.set_trace()
     W += grad(W, S_0, a0, pr0) * r0
 
     pr1 = P(W, S_0)
@@ -141,15 +188,6 @@ def test_convergence():
     a1 = np.argmax(pr1).flatten()
 
     assert(r1 > r0)
-
-
-
-    # plt.plot(Pr[:,0], label='a_0')
-    # plt.plot(Pr[:,1], label='a_1')
-    # plt.title("Prob of action a_0")
-    # plt.xlabel("Time-step")
-    # plt.ylabel("Probablity")
-    # plt.show()
 
 def test_gradient():
     W = np.array([[0.1],[-0.1]])
