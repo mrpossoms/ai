@@ -19,38 +19,55 @@ struct Net : torch::nn::Module
 
 	Net(unsigned obs_size, unsigned act_size)
 	{
-		layers[0] = { register_module("l0", torch::nn::Linear(obs_size, 16)) };
-		layers[1] = { register_module("l1", torch::nn::Linear(16, 4)) };
-		layers[2] = { register_module("l2", torch::nn::Linear(4, act_size)) };
+		l0 = { register_module("l0", torch::nn::Linear(obs_size, 16)) };
+		l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
+		l2 = { register_module("l2", torch::nn::Linear(16, 8)) };
+		l3 = { register_module("l3", torch::nn::Linear(8, act_size)) };
 	}
+
+	// Net(const )
 
 	torch::Tensor forward(torch::Tensor x)
 	{
-		x = torch::leaky_relu(layers[0]->forward(x));
-		x = torch::leaky_relu(layers[1]->forward(x));
-		x = torch::softmax(layers[2]->forward(x), 1);
+		x = torch::leaky_relu(l0->forward(x));
+		x = torch::leaky_relu(l1->forward(x));
+		x = torch::leaky_relu(l2->forward(x));
+		x = torch::softmax(l3->forward(x), 1);
 
 		return x;
 	}
 
-	torch::nn::Linear layers[3] = {
-		nullptr,
-		nullptr,
-		nullptr,
-	};
+	torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
 };
 
-Net model;
+std::shared_ptr<Net> model;
 std::unique_ptr<torch::optim::Adam> optimizer;
 
 void net::init(size_t observation_size, size_t action_size)
 {
-	model = Net(observation_size, action_size);
+	model = std::make_shared<Net>(observation_size, action_size);
+
+	// try to load the model
+	try
+	{
+		torch::load(model, std::string("model.pt"));
+		LOADED = true;
+	}
+	catch (const c10::Error& e)
+	{
+		LOADED = false;
+
+	}
 
 	optimizer = std::make_unique<torch::optim::Adam>(
-		model.parameters(),
+		model->parameters(),
 		torch::optim::AdamOptions(0.001)
 	);
+}
+
+void net::save(const std::string& path)
+{
+	torch::save(model, path);
 }
 
 bool net::loaded()
@@ -59,9 +76,9 @@ bool net::loaded()
 }
 
 
-void net::train_policy_gradient(const std::vector<RL::Trajectory::Frame>& traj, const net::hyper_parameters& hp)
+void net::train_policy_gradient(const std::vector<Trajectory::Frame>& traj, const net::hyper_parameters& hp)
 {
-	model.zero_grad();
+	model->zero_grad();
 
 	for (unsigned t = 0; t < traj.size(); t++)
 	{
@@ -70,7 +87,7 @@ void net::train_policy_gradient(const std::vector<RL::Trajectory::Frame>& traj, 
 		(torch::log(torch::flatten(f_t.action_probs)[f_t.action_idx]) * f_t.reward).backward();
 	}
 
-	for (auto& param : model.parameters())
+	for (auto& param : model->parameters())
 	{
 		param.data() += (param.grad() / static_cast<float>(traj.size())) * 0.01f;
 	}
@@ -80,23 +97,33 @@ void net::train_policy_gradient(const std::vector<RL::Trajectory::Frame>& traj, 
 
 torch::Tensor net::act_probs(torch::Tensor x)
 {
-	auto probs = model.forward(x);
+	auto probs = model->forward(x);
 
 	// float epsilon
-	auto eps = std::numeric_limits<float>::epsilon();
+	// auto eps = std::numeric_limits<float>::epsilon();
 
-	probs = probs.clamp(eps, 1.f - eps);
+	// probs = probs.clamp(eps, 1.f - eps);
 
 	return probs;
 }
 
 int net::act(torch::Tensor probs, bool stochastic)
 {
+	int a = 0;
 	if (stochastic)
 	{
 		auto index = torch::multinomial(probs, 1);
-		return index.item<int>();
+		a = index.item<int>();
+	}
+	else
+	{
+		a =  torch::argmax(probs, 1).item<int>();
 	}
 
-	return torch::argmax(probs, 1).item<int>();
+	// if (a >= 2)
+	// {
+	// 	std::cout << "action: " << a << std::endl;
+	// }
+
+	return a;
 }

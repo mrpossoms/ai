@@ -2,7 +2,31 @@
 #include <unistd.h>
 #include <tuple>
 #include <vector>
-#include "rl.hpp"
+
+#include "torch/torch.h"
+
+struct Trajectory
+{
+	struct Frame
+	{
+		torch::Tensor state;
+		torch::Tensor action_probs;
+		// torch::Tensor action;
+		unsigned action_idx;
+		float reward;
+	};
+
+	static float R(const std::vector<Frame>& T, float gamma=0.999f)
+	{
+		float r = 0.0f;
+		for (int i = 0; i < T.size(); i++)
+		{
+			r += pow(gamma, i) * T[i].reward;
+		}
+
+		return r;
+	}
+};
 
 namespace net 
 {
@@ -17,7 +41,9 @@ namespace net
 
 	bool loaded();
 
-	void train_policy_gradient(const std::vector<RL::Trajectory::Frame>& traj, const hyper_parameters& hp={});
+	void save(const std::string& path);
+
+	void train_policy_gradient(const std::vector<Trajectory::Frame>& traj, const hyper_parameters& hp={});
 
 	torch::Tensor act_probs(torch::Tensor x);
 

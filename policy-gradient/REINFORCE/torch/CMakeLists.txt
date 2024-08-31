@@ -13,7 +13,7 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spare-time)
 
-add_executable(puck driver.cpp net.cpp rl.cpp env.cpp)
+add_executable(puck driver.cpp net.cpp env.cpp)
 target_include_directories(puck PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
 target_link_libraries(puck "${TORCH_LIBRARIES}")
 target_link_libraries(puck ncurses pthread m)
@@ -33,7 +33,7 @@ endif (MSVC)
 
 # Setup testing
 enable_testing()
-add_executable(tests tests.cpp net.cpp rl.cpp env.cpp)
+add_executable(tests tests.cpp net.cpp env.cpp)
 target_include_directories(tests PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
 target_link_libraries(tests ncurses pthread m)
 target_link_libraries(tests "${TORCH_LIBRARIES}")

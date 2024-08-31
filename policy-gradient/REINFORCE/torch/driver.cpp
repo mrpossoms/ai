@@ -1,16 +1,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <math.h>
-
+#include <vector>
 #include <random>
 
 #include "net.hpp"
-#include "rl.hpp"
 #include "env.hpp"
 
 Environment env;
 
-std::vector<RL::Trajectory::Frame> traj;
+std::vector<Trajectory::Frame> traj;
 
 int playing()
 {
@@ -18,34 +17,26 @@ int playing()
 	return PLAYING;
 }
 
-RL::State get_state()
+torch::Tensor get_state()
 {
 	auto dx = env.state.goal[0] - env.state.position[0];
 	auto dy = env.state.goal[1] - env.state.position[1];
-	return {
-		dx, dy,
-		env.state.vel[0], env.state.vel[1],
-	};
-}
 
-torch::Tensor get_state_tensor()
-{
-	auto s = get_state();
 	auto x = torch::zeros({1, 4});
-	x[0][0] = s.d_goal[0];
-	x[0][1] = s.d_goal[1];
-	x[0][2] = s.vel[0];
-	x[0][3] = s.vel[1];
+	x[0][0] = dx;
+	x[0][1] = dy;
+	x[0][2] = env.state.vel[0];
+	x[0][3] = env.state.vel[1];
 
 	return x;
 }
 
 void sim_step()
 {
-	auto x = get_state_tensor();
+	auto x = get_state();
 	auto a_probs = net::act_probs(x); //.perturb(1.0f, 0.1f));
-	// std::cout << "x: " << x << " | u: " << a_probs << std::endl;
-	auto a = net::act(a_probs, false);
+	// std::cout << a_probs << std::endl;
+	auto a = net::act(a_probs, true);
 
 	const auto k_speed = 0.1f;
 
@@ -74,21 +65,27 @@ void update()
 	if (net::loaded())
 	{
 		TG_TIMEOUT = 10000;
-		if (env.distance_to_goal() < 2)
+		if (env.distance_to_goal() < 2 || traj.size() >= 256)
 		{
 			env.spawn(env.state.goal);
+			traj.clear();
 		}
 	}
 	else
 	{
-		if (traj.size() >= 128)
+		if (traj.size() >= (episode % 1000 == 0 ? 256 : 128))
 		{
-			rewards += RL::Trajectory::R(traj);
+			rewards += Trajectory::R(traj);
 
 			if (episode % 100 == 0)
 			{
 				std::cout << rewards / 1000.f << " ========================" << std::endl;
 				rewards = 0;
+			}
+
+			if (episode % 1000 == 0)
+			{
+				net::save("model.pt");
 			}
 
 			net::train_policy_gradient(traj, net::hyper_parameters{(unsigned)traj.size(), 0, 0.001});
@@ -103,7 +100,7 @@ void update()
 
 int main(int argc, char* argv[])
 {
-	net::init(4, sizeof(RL::Action) / sizeof(float));
+	net::init(4, 4);
 
 	env.reset();
 
@@ -114,6 +111,7 @@ int main(int argc, char* argv[])
 		// if (net::loaded())
 		if (episode % 1000 == 0)
 		{
+
 			env.render();		
 		}
 	}

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <random>
+#include <cassert>
 #include <signal.h>
 #include <curses.h>
 #include <term.h>
@@ -42,6 +43,10 @@ void sig_int_hndlr(int sig)
 	PLAYING = false;
 }
 
+static float randf()
+{
+	return (float)(((int)rand() % 2048) - 1024) / 1024.0f;
+}
 
 void input_hndlr()
 {
