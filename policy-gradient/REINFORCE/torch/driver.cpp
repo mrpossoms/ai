@@ -4,12 +4,13 @@
 #include <vector>
 #include <random>
 
-#include "net.hpp"
+#include "policy.hpp"
 #include "env.hpp"
 
 Environment env;
 
 std::vector<Trajectory::Frame> traj;
+std::shared_ptr<policy::Discrete> P;
 
 int playing()
 {
@@ -17,26 +18,13 @@ int playing()
 	return PLAYING;
 }
 
-torch::Tensor get_state()
-{
-	auto dx = env.state.goal[0] - env.state.position[0];
-	auto dy = env.state.goal[1] - env.state.position[1];
-
-	auto x = torch::zeros({1, 4});
-	x[0][0] = dx;
-	x[0][1] = dy;
-	x[0][2] = env.state.vel[0];
-	x[0][3] = env.state.vel[1];
-
-	return x;
-}
-
 void sim_step()
 {
-	auto x = get_state();
-	auto a_probs = net::act_probs(x); //.perturb(1.0f, 0.1f));
+	auto x_vec = env.get_state_vector();
+	auto x = torch::from_blob(x_vec.data(), {1, (long)x_vec.size()}, torch::kFloat);
+	auto a_probs = policy::act_probs(x); //.perturb(1.0f, 0.1f));
 	// std::cout << a_probs << std::endl;
-	auto a = net::act(a_probs, true);
+	auto a = policy::act(a_probs, true);
 
 	const auto k_speed = 0.1f;
 
@@ -57,12 +45,14 @@ void sim_step()
 
 unsigned episode = 0;
 float rewards = 0;
+bool policy_loaded;
 
 void update()
 {
-	sim_step();
+	// sim_step();
+	P->act(env.get_state_vector(), env, traj);
 
-	if (net::loaded())
+	if (policy_loaded)
 	{
 		TG_TIMEOUT = 10000;
 		if (env.distance_to_goal() < 2 || traj.size() >= 256)
@@ -85,10 +75,12 @@ void update()
 
 			if (episode % 1000 == 0)
 			{
-				net::save("model.pt");
+				// policy::save("model.pt");
+				torch::save(P, "model.pt");
 			}
 
-			net::train_policy_gradient(traj, net::hyper_parameters{(unsigned)traj.size(), 0, 0.001});
+			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj.size(), 0, 0.001});
+			P->train(traj, 0.01f);
 			episode++;
 
 			env.reset();
@@ -100,7 +92,18 @@ void update()
 
 int main(int argc, char* argv[])
 {
-	net::init(4, 4);
+	// policy::init(4, 4);
+	P = std::make_shared<policy::Discrete>(4, 4);
+
+	try
+	{
+		torch::load(P, std::string("model.pt"));
+		policy_loaded = true;
+	}
+	catch (const c10::Error& e)
+	{
+		policy_loaded = false;
+	}
 
 	env.reset();
 
@@ -108,7 +111,7 @@ int main(int argc, char* argv[])
 	{
 		update();
 	
-		// if (net::loaded())
+		// if (policy::loaded())
 		if (episode % 1000 == 0)
 		{
 

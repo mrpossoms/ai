@@ -117,7 +117,7 @@ float distance(float p0[2], float p2[2])
 	return sqrt((dx*dx + dy*dy) + 0.0001);
 }
 
-Environment::Environment()
+Environment::Environment() : _state_vector(4)
 {
 	signal(SIGWINCH, sig_winch_hndlr);
 	signal(SIGINT, sig_int_hndlr);
@@ -164,6 +164,19 @@ void Environment::reset()
 	state.vel[1] = randf() * 0;
 
 	memset(state.trace, 0, sizeof(state.trace));
+}
+
+const std::vector<float>& Environment::get_state_vector()
+{
+	auto dx = state.goal[0] - state.position[0];
+	auto dy = state.goal[1] - state.position[1];
+
+	_state_vector[0] = dx;
+	_state_vector[1] = dy;
+	_state_vector[2] = state.vel[0];
+	_state_vector[3] = state.vel[1];
+
+	return _state_vector;
 }
 
 float Environment::step_reward(float u[2])

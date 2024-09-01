@@ -1,5 +1,6 @@
 #pragma once
 #include <unistd.h>
+#include <vector>
 // #include "rl.hpp"
 
 extern int TG_TIMEOUT;
@@ -28,6 +29,8 @@ struct Environment
 
 	void reset();
 
+	const std::vector<float>& get_state_vector();
+
 	float distance_to_goal();
 
 	void spawn(float p[2]);
@@ -35,4 +38,7 @@ struct Environment
 	float step_reward(float u[2]);
 
 	void render();
+
+private:
+	std::vector<float> _state_vector;
 };

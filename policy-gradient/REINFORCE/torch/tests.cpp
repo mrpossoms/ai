@@ -1,5 +1,5 @@
 #include "env.hpp"
-#include "net.hpp"
+#include "policy.hpp"
 
 #include <iostream>
 
@@ -53,8 +53,8 @@ void check_positive_reinforcement()
 
 void check_policy_probabilities()
 {
-	net::init(4, 4);
-	auto probs = net::act_probs(torch::rand({1, 2}));
+	policy::init(4, 4);
+	auto probs = policy::act_probs(torch::rand({1, 2}));
 
 	assert(near(probs.sum().item<float>(), 1.f));
 }
