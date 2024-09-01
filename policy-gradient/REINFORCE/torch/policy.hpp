@@ -56,6 +56,21 @@ namespace policy
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
 	};
 
+	struct Continuous : public Policy, torch::nn::Module
+	{
+		Continuous(size_t observation_size, size_t action_size);
+
+		// bool load_params(const std::string& path) override;
+
+		// void save_params(const std::string& path) override;
+
+		torch::Tensor forward(torch::Tensor x);
+
+		virtual void act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj) override;
+		virtual void train(const std::vector<Trajectory::Frame>& traj, float learning_rate) override;
+	private:
+		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
+	};
 
 	struct hyper_parameters
 	{
