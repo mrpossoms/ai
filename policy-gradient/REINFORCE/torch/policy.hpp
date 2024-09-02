@@ -13,7 +13,7 @@ struct Trajectory
 	{
 		torch::Tensor state;
 		torch::Tensor action_probs;
-		// torch::Tensor action;
+		torch::Tensor action;
 		unsigned action_idx;
 		float reward;
 	};

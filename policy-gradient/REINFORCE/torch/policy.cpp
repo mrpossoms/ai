@@ -51,7 +51,7 @@ void policy::Discrete::act(const std::vector<float>& x, Environment& env, std::v
 
 	auto reward_t = env.step_reward(u);
 
-	traj.push_back({x_t, a_probs, (unsigned)a, reward_t});
+	traj.push_back({x_t, a_probs, {}, (unsigned)a, reward_t});
 }
 
 
@@ -94,25 +94,42 @@ torch::Tensor policy::Continuous::forward(torch::Tensor x)
 void policy::Continuous::act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj)
 {
 	auto x_t = torch::from_blob((void*)x.data(), {1, (long)x.size()}, torch::kFloat).clone();
+	std::cout << "x:" << x_t << std::endl;
+	assert(!torch::any(torch::isnan(x_t)).item<bool>());
+
 	auto a_dist_params = forward(x_t);
+
+	std::cout << "a_dist_params:" << a_dist_params << std::endl;
+
+	// assert that the output is a 1x4 tensor and not nan
+	assert(!torch::any(torch::isnan(a_dist_params)).item<bool>());
+	assert(a_dist_params.sizes() == torch::IntArrayRef({1, 4}));
+
+
 
 	const auto k_speed = 0.1f;
 
 	// a_dist_paras contains the mean and standard deviation of the normal distribution, use
 	// those to sample a continuous action
-	std::normal_distribution<float> c_dist(a_dist_params[0][0].item<float>(), a_dist_params[0][1].item<float>());
-	std::normal_distribution<float> r_dist(a_dist_params[0][2].item<float>(), a_dist_params[0][3].item<float>());
+	
+	auto mu_c = a_dist_params[0][0].item<float>();
+	auto mu_r = a_dist_params[0][1].item<float>();
+	std::normal_distribution<float> c_dist(mu_c, 0.1); //a_dist_params[0][1].item<float>());
+	std::normal_distribution<float> r_dist(mu_r, 0.1); //a_dist_params[0][3].item<float>());
 	static std::default_random_engine gen;
-
 	
 	float u[2] = {r_dist(gen), c_dist(gen)};
 
+	std::cout << "u:" << u[0] << " " << u[1] << std::endl;
+
+
 	auto reward_t = env.step_reward(u);
 
-	traj.push_back({x_t, a_dist_params, (unsigned)0, reward_t});
+	traj.push_back({x_t, a_dist_params, torch::from_blob(u, {1, 2}, torch::kFloat).clone(), (unsigned)0, reward_t});
 }
 
 
+using namespace torch::indexing;
 
 void policy::Continuous::train(const std::vector<Trajectory::Frame>& traj, float learning_rate)
 {
@@ -121,7 +138,13 @@ void policy::Continuous::train(const std::vector<Trajectory::Frame>& traj, float
 	for (unsigned t = 0; t < traj.size(); t++)
 	{
 		const auto& f_t = traj[t];
-		torch::log(f_t.action_probs * f_t.reward).backward();
+
+		auto mu = f_t.action_probs.index({0, Slice(0, 2)});
+		auto sigma_2 = torch::ones({1, 2}) * 0.01;
+		//f_t.action_probs.index({0, Slice(2, 4)}).pow(2);
+
+		// (torch::log(f_t.action_probs - f_t.action) * f_t.reward).backward();
+		(((((mu - f_t.action).pow(2) / sigma_2) + torch::log(sigma_2 * 2 * M_PI)) * -0.5).sum()).backward();
 	}
 
 	for (auto& param : parameters())

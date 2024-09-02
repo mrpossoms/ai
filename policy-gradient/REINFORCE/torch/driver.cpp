@@ -81,17 +81,19 @@ int main(int argc, char* argv[])
 	}
 
 	env.reset();
+	unsigned i = 0;
 
 	while (playing())
 	{
 		update();
 	
 		// if (policy::loaded())
-		if (episode % 1000 == 0)
+		if (episode % 1000 == 0 && i > 1000)
 		{
 
 			env.render();		
 		}
+		i++;
 	}
 
 	return 1;

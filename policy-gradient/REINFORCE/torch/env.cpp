@@ -181,6 +181,15 @@ const std::vector<float>& Environment::get_state_vector()
 
 float Environment::step_reward(float u[2])
 {
+	assert(!std::isnan(u[0]));
+	assert(!std::isnan(u[1]));
+
+	// clamp u
+	u[0] = std::max(-0.1f, std::min(0.1f, u[0]));
+	u[1] = std::max(-0.1f, std::min(0.1f, u[1]));
+
+
+
 	state.vel[0] += u[0];
 	state.vel[1] += u[1];
 
