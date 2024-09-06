@@ -6,6 +6,7 @@
 #include "torch/torch.h"
 #include "env.hpp"
 
+using namespace torch::indexing;
 
 struct Trajectory
 {
@@ -42,12 +43,7 @@ namespace policy
 
 	struct Discrete : public Policy, torch::nn::Module
 	{
-		Discrete(size_t observation_size, size_t action_size);
-
-		// bool load_params(const std::string& path) override;
-
-		// void save_params(const std::string& path) override;
-
+		Discrete();
 		torch::Tensor forward(torch::Tensor x);
 
 		virtual void act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj) override;
@@ -58,18 +54,13 @@ namespace policy
 
 	struct Continuous : public Policy, torch::nn::Module
 	{
-		Continuous(size_t observation_size, size_t action_size);
-
-		// bool load_params(const std::string& path) override;
-
-		// void save_params(const std::string& path) override;
-
+		Continuous();
 		torch::Tensor forward(torch::Tensor x);
 
 		virtual void act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj) override;
 		virtual void train(const std::vector<Trajectory::Frame>& traj, float learning_rate) override;
 	private:
-		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
+		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
 	};
 
 	struct hyper_parameters

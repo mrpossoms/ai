@@ -9,8 +9,10 @@
 
 Environment env;
 
+using Policy = policy::Discrete;
+
 std::vector<Trajectory::Frame> traj;
-std::shared_ptr<policy::Continuous> P;
+std::shared_ptr<Policy> P;
 
 int playing()
 {
@@ -48,7 +50,7 @@ void update()
 				rewards = 0;
 			}
 
-			if (episode % 1000 == 0)
+			if (episode % 1000 == 0 && episode / 1000 >= 1)
 			{
 				// policy::save("model.pt");
 				torch::save(P, "model.pt");
@@ -68,7 +70,7 @@ void update()
 int main(int argc, char* argv[])
 {
 	// policy::init(4, 4);
-	P = std::make_shared<policy::Continuous>(4, 4);
+	P = std::make_shared<Policy>();
 
 	try
 	{
