@@ -34,6 +34,7 @@ endif (MSVC)
 # Setup testing
 enable_testing()
 add_executable(tests tests.cpp policy.cpp env.cpp)
+set_property(TARGET tests PROPERTY CXX_STANDARD 17)
 target_include_directories(tests PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
 target_link_libraries(tests ncurses pthread m)
 target_link_libraries(tests "${TORCH_LIBRARIES}")
