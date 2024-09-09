@@ -142,7 +142,7 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, std:
 void policy::Continuous::train(const std::vector<Trajectory::Frame>& traj, float learning_rate)
 {
 	zero_grad();
-	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
+	const auto sqrt_2pi = std::sqrt(2 * M_PI);
 
 	for (unsigned t = 0; t < traj.size(); t++)
 	{

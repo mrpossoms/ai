@@ -204,8 +204,8 @@ float Environment::step_reward(float u[2])
 		state.trace[(int)state.position[0]][(int)state.position[1]] = 100;
 	}
 
-	state.vel[0] *= 0.9f;
-	state.vel[1] *= 0.9f;
+	state.vel[0] *= 0.95f;
+	state.vel[1] *= 0.95f;
 	auto d_t = distance_to_goal();
 
 	// compute reward
