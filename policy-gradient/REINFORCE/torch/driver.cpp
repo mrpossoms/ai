@@ -57,7 +57,7 @@ void update()
 			}
 
 			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj.size(), 0, 0.001});
-			P->train(traj, 0.01f);
+			P->train(traj, 0.1f);
 			episode++;
 
 			env.reset();

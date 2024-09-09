@@ -121,11 +121,11 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, std:
 
 	auto mu = a_dist_params.index({0, Slice(0, 2)});
 	// auto sigma_2 = torch::ones({1, 2}) * 1;
-	// auto sigma_2 = a_dist_params.index({0, Slice(2, 4)}).pow(2);
-	// std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma_2[0].item<float>());
-	// std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma_2[1].item<float>());
-	std::normal_distribution<float> c_dist(mu[0].item<float>(), 0.31);
-	std::normal_distribution<float> r_dist(mu[1].item<float>(), 0.31);
+	auto sigma = torch::log(torch::exp(a_dist_params.index({0, Slice(2, 4)})) + 1);
+	std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma[0].item<float>());
+	std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma[1].item<float>());
+	// std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma);
+	// std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma);
 	static std::default_random_engine gen;
 	
 	float u[2] = {r_dist(gen), c_dist(gen)};
@@ -149,12 +149,7 @@ void policy::Continuous::train(const std::vector<Trajectory::Frame>& traj, float
 		const auto& f_t = traj[t];
 
 		auto mu = f_t.action_probs.index({0, Slice(0, 2)});
-		auto sigma = 0.31;
-		// auto sigma_2 = f_t.action_probs.index({0, Slice(2, 4)}).pow(2);
-
-		// (torch::log(f_t.action_probs - f_t.action) * f_t.reward).backward();
-		//(((((mu - f_t.action).pow(2) / sigma_2) + torch::log(sigma_2 * 2 * M_PI)) * -0.5).sum()).backward();
-		// (torch::log((((mu - f_t.action).pow(2)))).sum() * f_t.reward * pow(0.99, t)).backward();
+		auto sigma = torch::log(torch::exp(f_t.action_probs.index({0, Slice(2, 4)})) + 1);
 
 		auto probs = ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((f_t.action - mu) / sigma).pow(2)));
 		(probs.prod() * f_t.reward).backward();
