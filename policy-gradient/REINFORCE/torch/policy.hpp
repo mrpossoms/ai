@@ -23,10 +23,10 @@ struct Trajectory
 {
 	Trajectory(int length, int observation_size, int action_size)
 	{
-		_states = torch::zeros({length, observation_size});
-		_action_probs = torch::zeros({length, action_size});
-		_actions = torch::zeros({length, action_size});
-		_rewards = torch::zeros({length, 1});
+		states = torch::zeros({length, observation_size});
+		action_probs = torch::zeros({length, action_size});
+		actions = torch::zeros({length, action_size});
+		rewards = torch::zeros({length, 1});
 		_capacity = length;
 	}
 
@@ -35,7 +35,7 @@ struct Trajectory
 		float r = 0.0f;
 		for (int i = 0; i < this->size(); i++)
 		{
-			r += pow(gamma, i) * this->_rewards[i].item<float>();
+			r += pow(gamma, i) * this->rewards[i].item<float>();
 		}
 
 		return r;
@@ -44,11 +44,11 @@ struct Trajectory
 	Frame operator[](size_t idx) const
 	{
 		return Frame{
-			_states[idx],
-			_action_probs[idx],
-			_actions[idx],
-			(unsigned)_actions[idx].argmax().item<int>(),
-			_rewards[idx]
+			states[idx],
+			action_probs[idx],
+			actions[idx],
+			(unsigned)actions[idx].argmax().item<int>(),
+			rewards[idx]
 		};
 	}
 
@@ -56,14 +56,14 @@ struct Trajectory
 	{
 		if (_size < _capacity)
 		{
-			// _states.index_put_({_size}, frame.state);
-			// _action_probs.index_put_({_size}, frame.action_probs);
-			// _actions.index_put_({_size}, frame.action);
-			// _rewards.index_put_({_size}, frame.reward);
-			_states[_size] = frame.state.flatten();
-			_action_probs[_size] = frame.action_probs.flatten();
-			_actions[_size] = frame.action.flatten();
-			_rewards[_size] = frame.reward;
+			// states.index_put_({_size}, frame.state);
+			// action_probs.index_put_({_size}, frame.action_probs);
+			// actions.index_put_({_size}, frame.action);
+			// rewards.index_put_({_size}, frame.reward);
+			states[_size] = frame.state.flatten();
+			action_probs[_size] = frame.action_probs.flatten();
+			actions[_size] = frame.action.flatten();
+			rewards[_size] = frame.reward;
 			_size++;
 		}
 	}
@@ -72,11 +72,11 @@ struct Trajectory
 
 	const size_t size() const { return _size; }
 
+	torch::Tensor states;
+	torch::Tensor action_probs;
+	torch::Tensor actions;
+	torch::Tensor rewards;
 private:
-	torch::Tensor _states;
-	torch::Tensor _action_probs;
-	torch::Tensor _actions;
-	torch::Tensor _rewards;
 	size_t _size = 0;
 	size_t _capacity = 0;
 };

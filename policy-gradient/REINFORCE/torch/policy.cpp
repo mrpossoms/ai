@@ -12,7 +12,7 @@
 
 // ens::Adam optimizer;
 
-// #define DEBUG
+#define DEBUG
 
 policy::Discrete::Discrete()
 {
@@ -123,15 +123,15 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, traj
 
 	static std::default_random_engine gen;
 	
-	float u[2] = {r_dist(gen), c_dist(gen)};
+	float u[4] = {r_dist(gen), c_dist(gen), 0 ,0};
 #ifdef DEBUG
 	std::cout << "u:" << u[0] << " " << u[1] << std::endl;
 #endif
 
 	auto reward = env.step_reward(u);
-	auto reward_t = torch::from_blob(&reward, {1, 1}, torch::kFloat).clone();
+	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
 
-	traj.push_back({x_t, a_dist_params, torch::from_blob(u, {1, 2}, torch::kFloat).clone(), (unsigned)0, reward_t});
+	traj.push_back({x_t, a_dist_params, torch::from_blob(u, {1, 4}, torch::kFloat).clone(), (unsigned)0, reward_t});
 }
 
 
@@ -140,16 +140,42 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 	zero_grad();
 	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 
-	for (unsigned t = 0; t < traj.size(); t++)
-	{
-		const auto f_t = traj[t];
+// 	for (unsigned t = 0; t < traj.size(); t++)
+// 	{
+// 		const auto f_t = traj[t];
+// #ifdef DEBUG
+// 		std::cout << "f_t.action_probs: " << f_t.action_probs << std::endl;
+// 		std::cout << "f_t.action: " << f_t.action << std::endl;
+// 		std::cout << "f_t.reward: " << f_t.reward << std::endl;
+// #endif
 
-		auto mu = f_t.action_probs.index({0, Slice(0, 2)});
-		auto sigma = torch::log(torch::exp(f_t.action_probs.index({0, Slice(2, 4)})) + 1);
+// 		auto mu = f_t.action_probs.index({Slice(0, 2)});
+// #ifdef DEBUG
+// 		std::cout << "mu: " << mu << std::endl;
+// #endif
+// 		auto sigma = torch::log(torch::exp(f_t.action_probs.index({Slice(2, 4)})) + 1);
+// #ifdef DEBUG
+// 		std::cout << "sigma: " << sigma << std::endl;
+// #endif
+// 		auto probs = ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((f_t.action.index({Slice(0, 2)}) - mu) / sigma).pow(2)));
+// 		(probs.prod() * f_t.reward).backward();
+// 	}
 
-		auto probs = ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((f_t.action - mu) / sigma).pow(2)));
-		(probs.prod() * f_t.reward).backward();
-	}
+	auto mus = traj.actions.index({Slice(0, traj.size()), Slice(0, 2)});
+	auto sigmas = torch::log(torch::exp(traj.action_probs.index({Slice(0, traj.size()), Slice(2, 4)})) + 1);
+	auto probs = ((1/(sigmas * sqrt_2pi)) * torch::exp(-0.5 * ((traj.actions.index({Slice(0, traj.size()), Slice(0, 2)}) - mus) / sigmas).pow(2)));
+	auto r = (probs.prod(1) * traj.rewards).sum();
+
+#ifdef DEBUG
+	std::cout << "action_probs: " << traj.action_probs << std::endl;
+	std::cout << "mus: " << mus << std::endl;
+	std::cout << "sigmas: " << sigmas << std::endl;
+	std::cout << "probs: " << probs << std::endl;
+	std::cout << "r: " << r << std::endl;
+#endif
+
+
+	r.backward();
 
 	for (auto& param : parameters())
 	{
