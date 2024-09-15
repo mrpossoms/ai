@@ -26,7 +26,7 @@ struct Trajectory
 		_states = torch::zeros({length, observation_size});
 		_action_probs = torch::zeros({length, action_size});
 		_actions = torch::zeros({length, action_size});
-		_rewards = torch::zeros({length});
+		_rewards = torch::zeros({length, 1});
 		_capacity = length;
 	}
 
@@ -60,9 +60,9 @@ struct Trajectory
 			// _action_probs.index_put_({_size}, frame.action_probs);
 			// _actions.index_put_({_size}, frame.action);
 			// _rewards.index_put_({_size}, frame.reward);
-			_states[_size] = frame.state;
-			_action_probs[_size] = frame.action_probs;
-			_actions[_size] = frame.action;
+			_states[_size] = frame.state.flatten();
+			_action_probs[_size] = frame.action_probs.flatten();
+			_actions[_size] = frame.action.flatten();
 			_rewards[_size] = frame.reward;
 			_size++;
 		}

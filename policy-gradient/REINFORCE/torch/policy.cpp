@@ -129,7 +129,7 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, traj
 #endif
 
 	auto reward = env.step_reward(u);
-	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
+	auto reward_t = torch::from_blob(&reward, {1, 1}, torch::kFloat).clone();
 
 	traj.push_back({x_t, a_dist_params, torch::from_blob(u, {1, 2}, torch::kFloat).clone(), (unsigned)0, reward_t});
 }

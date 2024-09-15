@@ -9,7 +9,7 @@
 
 Environment env;
 
-using Policy = policy::Discrete;
+using Policy = policy::Continuous;
 
 std::shared_ptr<trajectory::Trajectory> traj;
 std::shared_ptr<Policy> P;
