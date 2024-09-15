@@ -11,7 +11,7 @@ Environment env;
 
 using Policy = policy::Discrete;
 
-trajectory::Trajectory traj;
+std::shared_ptr<trajectory::Trajectory> traj;
 std::shared_ptr<Policy> P;
 
 int playing()
@@ -27,22 +27,22 @@ bool policy_loaded;
 void update()
 {
 	// sim_step();
-	P->act(env.get_state_vector(), env, traj);
+	P->act(env.get_state_vector(), env, *traj);
 
 	if (policy_loaded)
 	{
 		TG_TIMEOUT = 10000;
-		if (env.distance_to_goal() < 2 || traj.size() >= 256)
+		if (env.distance_to_goal() < 2 || traj->size() >= 256)
 		{
 			env.spawn(env.state.goal);
-			traj.clear();
+			traj->clear();
 		}
 	}
 	else
 	{
-		if (traj.size() >= (episode % 1000 == 0 ? 256 : 128))
+		if (traj->size() >= (episode % 1000 == 0 ? 256 : 128))
 		{
-			rewards += traj.R();
+			rewards += traj->R();
 
 			if (episode % 100 == 0)
 			{
@@ -56,12 +56,12 @@ void update()
 				torch::save(P, "model.pt");
 			}
 
-			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj.size(), 0, 0.001});
-			P->train(traj, 0.1f);
+			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj->size(), 0, 0.001});
+			P->train(*traj, 0.1f);
 			episode++;
 
 			env.reset();
-			traj.clear();
+			traj->clear();
 		}
 	}
 }
@@ -71,6 +71,7 @@ int main(int argc, char* argv[])
 {
 	// policy::init(4, 4);
 	P = std::make_shared<Policy>();
+	traj = std::make_shared<trajectory::Trajectory>(256, P->observation_size(), P->action_size());
 
 	try
 	{

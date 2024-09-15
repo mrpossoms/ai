@@ -16,29 +16,18 @@ namespace trajectory
 		torch::Tensor action_probs;
 		torch::Tensor action;
 		unsigned action_idx;
-		float reward;
+		torch::Tensor reward;
 	};	
 
-struct Trajectory : public std::vector<Frame>
+struct Trajectory
 {
-	Trajectory() = default;
-
-	Trajectory(const std::vector<Frame>& T) : std::vector<Frame>(T) {}
-
-	Trajectory(const Trajectory& T) : std::vector<Frame>(T) {}
-
-	Trajectory(const Trajectory&& T) : std::vector<Frame>(T) {}
-
-	Trajectory& operator=(const Trajectory& T)
+	Trajectory(int length, int observation_size, int action_size)
 	{
-		std::vector<Frame>::operator=(T);
-		return *this;
-	}
-
-	Trajectory& operator=(const Trajectory&& T)
-	{
-		std::vector<Frame>::operator=(T);
-		return *this;
+		_states = torch::zeros({length, observation_size});
+		_action_probs = torch::zeros({length, action_size});
+		_actions = torch::zeros({length, action_size});
+		_rewards = torch::zeros({length});
+		_capacity = length;
 	}
 
 	float R(float gamma=0.999f)
@@ -46,11 +35,50 @@ struct Trajectory : public std::vector<Frame>
 		float r = 0.0f;
 		for (int i = 0; i < this->size(); i++)
 		{
-			r += pow(gamma, i) * (*this)[i].reward;
+			r += pow(gamma, i) * this->_rewards[i].item<float>();
 		}
 
 		return r;
 	}
+
+	Frame operator[](size_t idx) const
+	{
+		return Frame{
+			_states[idx],
+			_action_probs[idx],
+			_actions[idx],
+			(unsigned)_actions[idx].argmax().item<int>(),
+			_rewards[idx]
+		};
+	}
+
+	void push_back(const Frame& frame)
+	{
+		if (_size < _capacity)
+		{
+			// _states.index_put_({_size}, frame.state);
+			// _action_probs.index_put_({_size}, frame.action_probs);
+			// _actions.index_put_({_size}, frame.action);
+			// _rewards.index_put_({_size}, frame.reward);
+			_states[_size] = frame.state;
+			_action_probs[_size] = frame.action_probs;
+			_actions[_size] = frame.action;
+			_rewards[_size] = frame.reward;
+			_size++;
+		}
+	}
+
+	void clear() { _size = 0; }
+
+	const size_t size() const { return _size; }
+
+private:
+	torch::Tensor _states;
+	torch::Tensor _action_probs;
+	torch::Tensor _actions;
+	torch::Tensor _rewards;
+	size_t _size = 0;
+	size_t _capacity = 0;
 };
 
 }
@@ -64,6 +92,8 @@ namespace policy
 		// virtual void save_params(const std::string& path) = 0;
 		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) = 0;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) = 0;
+		virtual size_t action_size() = 0;
+		virtual size_t observation_size() = 0;
 	};
 
 	struct Discrete : public Policy, torch::nn::Module
@@ -73,6 +103,8 @@ namespace policy
 
 		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
+		virtual size_t action_size() override { return 4; }
+		virtual size_t observation_size() override { return 4; }
 	private:
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
 	};
@@ -84,6 +116,9 @@ namespace policy
 
 		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
+		virtual size_t action_size() override { return 4; }
+		virtual size_t observation_size() override { return 4; }
+
 	private:
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
 	};

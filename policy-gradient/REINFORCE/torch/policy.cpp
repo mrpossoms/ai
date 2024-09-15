@@ -16,13 +16,10 @@
 
 policy::Discrete::Discrete()
 {
-	const auto observation_size = 4;
-	const auto action_size = 4;
-
-	l0 = { register_module("l0", torch::nn::Linear(observation_size, 16)) };
+	l0 = { register_module("l0", torch::nn::Linear(observation_size(), 16)) };
 	l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
 	l2 = { register_module("l2", torch::nn::Linear(16, 8)) };
-	l3 = { register_module("l3", torch::nn::Linear(8, action_size)) };
+	l3 = { register_module("l3", torch::nn::Linear(8, action_size())) };
 }
 
 torch::Tensor policy::Discrete::forward(torch::Tensor x)
@@ -53,7 +50,9 @@ void policy::Discrete::act(const std::vector<float>& x, Environment& env, trajec
 		case 3: u[1] += -k_speed; break;
 	}
 
-	auto reward_t = env.step_reward(u);
+	// create tensor from scalar reward
+	auto reward = env.step_reward(u);
+	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
 	auto action = torch::ones({1, 4}) * 0.01;
 	action.index_put_({0, a}, 1);
 	traj.push_back({x_t, a_probs, action, (unsigned)a, reward_t});
@@ -67,7 +66,7 @@ void policy::Discrete::train(const trajectory::Trajectory& traj, float learning_
 
 	for (unsigned t = 0; t < traj.size(); t++)
 	{
-		const auto& f_t = traj[t];
+		const auto f_t = traj[t];
 		(torch::log(f_t.action_probs.flatten()[f_t.action_idx]) * f_t.reward).backward();
 	}
 
@@ -80,13 +79,9 @@ void policy::Discrete::train(const trajectory::Trajectory& traj, float learning_
 
 policy::Continuous::Continuous()
 {
-	const auto observation_size = 4;
-	const auto action_size = 2;
-
-
-	l0 = { register_module("l0", torch::nn::Linear(observation_size, 16)) };
+	l0 = { register_module("l0", torch::nn::Linear(observation_size(), 16)) };
 	l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
-	l2 = { register_module("l2", torch::nn::Linear(16, action_size)) };
+	l2 = { register_module("l2", torch::nn::Linear(16, action_size())) };
 }
 
 torch::Tensor policy::Continuous::forward(torch::Tensor x)
@@ -133,7 +128,8 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, traj
 	std::cout << "u:" << u[0] << " " << u[1] << std::endl;
 #endif
 
-	auto reward_t = env.step_reward(u);
+	auto reward = env.step_reward(u);
+	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
 
 	traj.push_back({x_t, a_dist_params, torch::from_blob(u, {1, 2}, torch::kFloat).clone(), (unsigned)0, reward_t});
 }
@@ -146,7 +142,7 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 
 	for (unsigned t = 0; t < traj.size(); t++)
 	{
-		const auto& f_t = traj[t];
+		const auto f_t = traj[t];
 
 		auto mu = f_t.action_probs.index({0, Slice(0, 2)});
 		auto sigma = torch::log(torch::exp(f_t.action_probs.index({0, Slice(2, 4)})) + 1);
