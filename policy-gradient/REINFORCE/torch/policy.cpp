@@ -35,7 +35,7 @@ torch::Tensor policy::Discrete::forward(torch::Tensor x)
 	return x;
 }
 
-void policy::Discrete::act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj)
+void policy::Discrete::act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj)
 {
 	auto x_t = torch::from_blob((void*)x.data(), {1, (long)x.size()}, torch::kFloat).clone();
 	auto a_probs = forward(x_t);
@@ -61,7 +61,7 @@ void policy::Discrete::act(const std::vector<float>& x, Environment& env, std::v
 
 
 
-void policy::Discrete::train(const std::vector<Trajectory::Frame>& traj, float learning_rate)
+void policy::Discrete::train(const trajectory::Trajectory& traj, float learning_rate)
 {
 	zero_grad();
 
@@ -83,6 +83,7 @@ policy::Continuous::Continuous()
 	const auto observation_size = 4;
 	const auto action_size = 2;
 
+
 	l0 = { register_module("l0", torch::nn::Linear(observation_size, 16)) };
 	l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
 	l2 = { register_module("l2", torch::nn::Linear(16, action_size)) };
@@ -97,7 +98,7 @@ torch::Tensor policy::Continuous::forward(torch::Tensor x)
 	return x;
 }
 
-void policy::Continuous::act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj)
+void policy::Continuous::act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj)
 {
 	auto x_t = torch::from_blob((void*)x.data(), {1, (long)x.size()}, torch::kFloat).clone();
 	assert(!torch::any(torch::isnan(x_t)).item<bool>());
@@ -124,8 +125,7 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, std:
 	auto sigma = torch::log(torch::exp(a_dist_params.index({0, Slice(2, 4)})) + 1);
 	std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma[0].item<float>());
 	std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma[1].item<float>());
-	// std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma);
-	// std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma);
+
 	static std::default_random_engine gen;
 	
 	float u[2] = {r_dist(gen), c_dist(gen)};
@@ -139,10 +139,10 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, std:
 }
 
 
-void policy::Continuous::train(const std::vector<Trajectory::Frame>& traj, float learning_rate)
+void policy::Continuous::train(const trajectory::Trajectory& traj, float learning_rate)
 {
 	zero_grad();
-	const auto sqrt_2pi = std::sqrt(2 * M_PI);
+	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 
 	for (unsigned t = 0; t < traj.size(); t++)
 	{

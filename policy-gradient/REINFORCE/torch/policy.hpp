@@ -8,7 +8,7 @@
 
 using namespace torch::indexing;
 
-struct Trajectory
+namespace trajectory
 {
 	struct Frame
 	{
@@ -17,19 +17,44 @@ struct Trajectory
 		torch::Tensor action;
 		unsigned action_idx;
 		float reward;
-	};
+	};	
 
-	static float R(const std::vector<Frame>& T, float gamma=0.999f)
+struct Trajectory : public std::vector<Frame>
+{
+	Trajectory() = default;
+
+	Trajectory(const std::vector<Frame>& T) : std::vector<Frame>(T) {}
+
+	Trajectory(const Trajectory& T) : std::vector<Frame>(T) {}
+
+	Trajectory(const Trajectory&& T) : std::vector<Frame>(T) {}
+
+	Trajectory& operator=(const Trajectory& T)
+	{
+		std::vector<Frame>::operator=(T);
+		return *this;
+	}
+
+	Trajectory& operator=(const Trajectory&& T)
+	{
+		std::vector<Frame>::operator=(T);
+		return *this;
+	}
+
+	float R(float gamma=0.999f)
 	{
 		float r = 0.0f;
-		for (int i = 0; i < T.size(); i++)
+		for (int i = 0; i < this->size(); i++)
 		{
-			r += pow(gamma, i) * T[i].reward;
+			r += pow(gamma, i) * (*this)[i].reward;
 		}
 
 		return r;
 	}
 };
+
+}
+
 
 namespace policy
 {
@@ -37,8 +62,8 @@ namespace policy
 	{
 		// virtual bool load_params(const std::string& path) = 0;
 		// virtual void save_params(const std::string& path) = 0;
-		virtual void act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj) = 0;
-		virtual void train(const std::vector<Trajectory::Frame>& traj, float learning_rate) = 0;
+		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) = 0;
+		virtual void train(const trajectory::Trajectory& traj, float learning_rate) = 0;
 	};
 
 	struct Discrete : public Policy, torch::nn::Module
@@ -46,8 +71,8 @@ namespace policy
 		Discrete();
 		torch::Tensor forward(torch::Tensor x);
 
-		virtual void act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj) override;
-		virtual void train(const std::vector<Trajectory::Frame>& traj, float learning_rate) override;
+		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) override;
+		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
 	private:
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
 	};
@@ -57,8 +82,8 @@ namespace policy
 		Continuous();
 		torch::Tensor forward(torch::Tensor x);
 
-		virtual void act(const std::vector<float>& x, Environment& env, std::vector<Trajectory::Frame>& traj) override;
-		virtual void train(const std::vector<Trajectory::Frame>& traj, float learning_rate) override;
+		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) override;
+		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
 	private:
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
 	};
@@ -76,7 +101,7 @@ namespace policy
 
 	void save(const std::string& path);
 
-	void train_policy_gradient(const std::vector<Trajectory::Frame>& traj, const hyper_parameters& hp={});
+	void train_policy_gradient(const trajectory::Trajectory& traj, const hyper_parameters& hp={});
 
 	torch::Tensor act_probs(torch::Tensor x);
 

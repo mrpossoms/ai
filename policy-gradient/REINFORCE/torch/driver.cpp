@@ -11,7 +11,7 @@ Environment env;
 
 using Policy = policy::Discrete;
 
-std::vector<Trajectory::Frame> traj;
+trajectory::Trajectory traj;
 std::shared_ptr<Policy> P;
 
 int playing()
@@ -42,7 +42,7 @@ void update()
 	{
 		if (traj.size() >= (episode % 1000 == 0 ? 256 : 128))
 		{
-			rewards += Trajectory::R(traj);
+			rewards += traj.R();
 
 			if (episode % 100 == 0)
 			{
