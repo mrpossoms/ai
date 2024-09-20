@@ -68,7 +68,14 @@ struct Trajectory
 		}
 	}
 
-	void clear() { _size = 0; }
+	void clear()
+	{ 
+		_size = 0;
+		states = torch::zeros({_capacity, states.size(1)});
+		action_probs = torch::zeros({_capacity, action_probs.size(1)});
+		actions = torch::zeros({_capacity, action_probs.size(1)});
+		rewards = torch::zeros({_capacity, 1});
+	}
 
 	const size_t size() const { return _size; }
 
@@ -78,7 +85,7 @@ struct Trajectory
 	torch::Tensor rewards;
 private:
 	size_t _size = 0;
-	size_t _capacity = 0;
+	long _capacity = 0;
 };
 
 }

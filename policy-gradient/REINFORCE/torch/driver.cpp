@@ -32,7 +32,7 @@ void update()
 	if (policy_loaded)
 	{
 		TG_TIMEOUT = 10000;
-		if (env.distance_to_goal() < 2 || traj->size() >= 256)
+		if (env.distance_to_goal() < 2 || traj->size() >= 64)
 		{
 			env.spawn(env.state.goal);
 			traj->clear();
@@ -40,7 +40,7 @@ void update()
 	}
 	else
 	{
-		if (traj->size() >= (episode % 1000 == 0 ? 256 : 128))
+		if (traj->size() >= 64)
 		{
 			rewards += traj->R();
 
@@ -57,7 +57,7 @@ void update()
 			}
 
 			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj->size(), 0, 0.001});
-			P->train(*traj, 0.1f);
+			P->train(*traj, 0.01f);
 			episode++;
 
 			env.reset();
@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
 {
 	// policy::init(4, 4);
 	P = std::make_shared<Policy>();
-	traj = std::make_shared<trajectory::Trajectory>(256, P->observation_size(), P->action_size());
+	traj = std::make_shared<trajectory::Trajectory>(64, P->observation_size(), P->action_size());
 
 	try
 	{

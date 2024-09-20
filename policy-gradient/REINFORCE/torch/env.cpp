@@ -185,13 +185,13 @@ float Environment::step_reward(float u[2])
 	assert(!std::isnan(u[1]));
 
 	// clamp u
-	u[0] = std::max(-0.1f, std::min(0.1f, u[0]));
-	u[1] = std::max(-0.1f, std::min(0.1f, u[1]));
+	float u0 = std::max(-0.1f, std::min(0.1f, u[0]));
+	float u1 = std::max(-0.1f, std::min(0.1f, u[1]));
 
 
 
-	state.vel[0] += u[0];
-	state.vel[1] += u[1];
+	state.vel[0] += u0;
+	state.vel[1] += u1;
 
 	auto d_t_1 = distance_to_goal();
 
