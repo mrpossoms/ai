@@ -1,6 +1,7 @@
 #pragma once
 #include <unistd.h>
 #include <vector>
+#include <random>
 // #include "rl.hpp"
 
 extern int TG_TIMEOUT;
@@ -41,4 +42,6 @@ struct Environment
 
 private:
 	std::vector<float> _state_vector;
+	std::random_device rd;  // a seed source for the random number engine
+	std::mt19937 gen; // mersenne_twister_engine seeded with rd()
 };

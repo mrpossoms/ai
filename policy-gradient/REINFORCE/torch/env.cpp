@@ -5,16 +5,12 @@
 #include "tg.h"
 
 #include <algorithm>
-#include <random>
 #include <cassert>
 #include <signal.h>
 #include <curses.h>
 #include <term.h>
 #include <termios.h>
 #include <time.h>
-
-static std::random_device rd;  // a seed source for the random number engine
-static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
 
 int TG_TIMEOUT = 100;
 
@@ -117,7 +113,7 @@ float distance(float p0[2], float p2[2])
 	return sqrt((dx*dx + dy*dy) + 0.0001);
 }
 
-Environment::Environment() : _state_vector(4)
+Environment::Environment() : _state_vector(4), gen(rd())
 {
 	signal(SIGWINCH, sig_winch_hndlr);
 	signal(SIGINT, sig_int_hndlr);

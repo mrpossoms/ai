@@ -7,7 +7,7 @@
 #include "policy.hpp"
 #include "env.hpp"
 
-Environment env;
+static Environment env;
 
 using Policy = policy::Continuous;
 
