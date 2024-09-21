@@ -19,7 +19,7 @@ policy::Discrete::Discrete()
 	l0 = { register_module("l0", torch::nn::Linear(observation_size(), 16)) };
 	l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
 	l2 = { register_module("l2", torch::nn::Linear(16, 8)) };
-	l3 = { register_module("l3", torch::nn::Linear(8, action_size())) };
+	l3 = { register_module("l3", torch::nn::Linear(8, output_size())) };
 }
 
 torch::Tensor policy::Discrete::forward(torch::Tensor x)
@@ -32,8 +32,9 @@ torch::Tensor policy::Discrete::forward(torch::Tensor x)
 	return x;
 }
 
-void policy::Discrete::act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj)
+const torch::Tensor policy::Discrete::act(Environment& env, trajectory::Trajectory& traj)
 {
+	const auto x = env.get_state_vector();
 	auto x_t = torch::from_blob((void*)x.data(), {1, (long)x.size()}, torch::kFloat).clone();
 	auto a_probs = forward(x_t);
 	auto index = torch::multinomial(a_probs, 1);
@@ -56,6 +57,7 @@ void policy::Discrete::act(const std::vector<float>& x, Environment& env, trajec
 	auto action = torch::ones({1, 4}) * 0.01;
 	action.index_put_({0, a}, 1);
 	traj.push_back({x_t, a_probs, action, (unsigned)a, reward_t});
+	return a_probs;
 }
 
 
@@ -81,7 +83,7 @@ policy::Continuous::Continuous()
 {
 	l0 = { register_module("l0", torch::nn::Linear(observation_size(), 16)) };
 	l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
-	l2 = { register_module("l2", torch::nn::Linear(16, action_size())) };
+	l2 = { register_module("l2", torch::nn::Linear(16, output_size())) };
 }
 
 torch::Tensor policy::Continuous::forward(torch::Tensor x)
@@ -93,8 +95,9 @@ torch::Tensor policy::Continuous::forward(torch::Tensor x)
 	return x;
 }
 
-void policy::Continuous::act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj)
+const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
 {
+	const auto x = env.get_state_vector();
 	auto x_t = torch::from_blob((void*)x.data(), {1, (long)x.size()}, torch::kFloat).clone();
 	assert(!torch::any(torch::isnan(x_t)).item<bool>());
 
@@ -107,23 +110,14 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, traj
 	assert(!torch::any(torch::isnan(a_dist_params)).item<bool>());
 	assert(a_dist_params.sizes() == torch::IntArrayRef({1, 4}));
 
-
-
-	const auto k_speed = 0.1f;
-
-	// a_dist_paras contains the mean and standard deviation of the normal distribution, use
-	// those to sample a continuous action
-	
-
-	auto mu = a_dist_params.index({0, Slice(0, 2)});
-	// auto sigma_2 = torch::ones({1, 2}) * 1;
-	auto sigma = torch::log(torch::exp(a_dist_params.index({0, Slice(2, 4)})) + 1) + 0.01f;
+	auto mu = a_dist_params.index({0, Slice(0, action_size())});
+	auto sigma = torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
 	std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma[0].item<float>());
 	std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma[1].item<float>());
 
 	static std::default_random_engine gen;
 	
-	float u[4] = {r_dist(gen), c_dist(gen), 0 ,0};
+	float u[2] = {r_dist(gen), c_dist(gen)};
 #ifdef DEBUG
 	std::cout << "u:" << u[0] << " " << u[1] << std::endl;
 #endif
@@ -131,14 +125,19 @@ void policy::Continuous::act(const std::vector<float>& x, Environment& env, traj
 	auto reward = env.step_reward(u);
 	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
 
-	traj.push_back({x_t, a_dist_params, torch::from_blob(u, {1, 4}, torch::kFloat).clone(), (unsigned)0, reward_t});
+	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
+	auto u_t = torch::from_blob(u, {1, 2}, torch::kFloat).clone();
+	auto a_probs = ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((u_t - mu) / sigma).pow(2)));
+
+	traj.push_back({x_t, a_probs, u_t, (unsigned)0, reward_t});
+
+	return a_probs;
 }
 
 
 void policy::Continuous::train(const trajectory::Trajectory& traj, float learning_rate)
 {
 	zero_grad();
-	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 
 // 	for (unsigned t = 0; t < traj.size(); t++)
 // 	{
@@ -161,11 +160,11 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 // 		(probs.prod() * f_t.reward).backward();
 // 	}
 
-	auto mus = traj.action_probs.index({Slice(0, traj.size()), Slice(0, 2)});
-	auto sigmas = torch::log(torch::exp(traj.action_probs.index({Slice(0, traj.size()), Slice(2, 4)})) + 1) + 0.01f;
-	auto u = traj.actions.index({Slice(0, traj.size()), Slice(0, 2)});
-	auto probs = ((1/(sigmas * sqrt_2pi)) * torch::exp(-0.5 * ((u - mus) / sigmas).pow(2)));
-	auto prob_prods = probs.prod(1);
+	// auto mus = traj.action_probs.index({Slice(0, traj.size()), Slice(0, 2)});
+
+	// auto u = traj.actions.index({Slice(0, traj.size()), Slice(0, 2)});
+	// auto probs = ((1/(sigmas * sqrt_2pi)) * torch::exp(-0.5 * ((u - mus) / sigmas).pow(2)));
+	auto prob_prods = traj.action_probs.prod(1);
 	auto r = (prob_prods * traj.rewards).sum() / static_cast<float>(traj.size());
 
 #ifdef DEBUG

@@ -127,6 +127,7 @@ Environment::Environment() : _state_vector(4)
 
 	term.max_rows = 40;
 	term.max_cols = 80;
+	reset();
 }
 
 Environment::~Environment()

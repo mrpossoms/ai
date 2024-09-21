@@ -27,7 +27,7 @@ bool policy_loaded;
 void update()
 {
 	// sim_step();
-	P->act(env.get_state_vector(), env, *traj);
+	P->act(env, *traj);
 
 	if (policy_loaded)
 	{
@@ -57,7 +57,7 @@ void update()
 			}
 
 			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj->size(), 0, 0.001});
-			P->train(*traj, 0.01f);
+			P->train(*traj, 0.001f);
 			episode++;
 
 			env.reset();

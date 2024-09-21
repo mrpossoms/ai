@@ -97,8 +97,9 @@ namespace policy
 	{
 		// virtual bool load_params(const std::string& path) = 0;
 		// virtual void save_params(const std::string& path) = 0;
-		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) = 0;
+		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) = 0;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) = 0;
+		virtual size_t output_size() { return action_size(); }
 		virtual size_t action_size() = 0;
 		virtual size_t observation_size() = 0;
 	};
@@ -108,7 +109,7 @@ namespace policy
 		Discrete();
 		torch::Tensor forward(torch::Tensor x);
 
-		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) override;
+		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
 		virtual size_t action_size() override { return 4; }
 		virtual size_t observation_size() override { return 4; }
@@ -121,32 +122,13 @@ namespace policy
 		Continuous();
 		torch::Tensor forward(torch::Tensor x);
 
-		virtual void act(const std::vector<float>& x, Environment& env, trajectory::Trajectory& traj) override;
+		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
-		virtual size_t action_size() override { return 4; }
+		virtual size_t action_size() override { return 2; }
+		virtual size_t output_size() override { return 4; }
 		virtual size_t observation_size() override { return 4; }
 
 	private:
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
 	};
-
-	struct hyper_parameters
-	{
-		unsigned epochs = 1;
-		unsigned batch_size = 1;
-		float learning_rate = 0.001f;
-	};
-
-	void init(size_t observation_size, size_t action_size);
-
-	bool loaded();
-
-	void save(const std::string& path);
-
-	void train_policy_gradient(const trajectory::Trajectory& traj, const hyper_parameters& hp={});
-
-	torch::Tensor act_probs(torch::Tensor x);
-
-	int act(torch::Tensor probs, bool stochastic=true);
-
 }

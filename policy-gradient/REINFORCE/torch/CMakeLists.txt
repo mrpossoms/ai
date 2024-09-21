@@ -13,10 +13,13 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spare-time)
 
-add_executable(puck driver.cpp policy.cpp env.cpp)
-target_include_directories(puck PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
-target_link_libraries(puck "${TORCH_LIBRARIES}")
-target_link_libraries(puck ncurses pthread m)
+add_library(puck-core policy.cpp env.cpp)
+target_link_libraries(puck-core "${TORCH_LIBRARIES}")
+target_link_libraries(puck-core ncurses pthread m)
+target_include_directories(puck-core PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
+
+add_executable(puck driver.cpp)
+target_link_libraries(puck puck-core)
 set_property(TARGET puck PROPERTY CXX_STANDARD 17)
 
 # The following code block is suggested to be used on Windows.
@@ -33,8 +36,6 @@ endif (MSVC)
 
 # Setup testing
 enable_testing()
-add_executable(tests tests.cpp policy.cpp env.cpp)
+add_executable(tests tests.cpp)
+target_link_libraries(tests puck-core)
 set_property(TARGET tests PROPERTY CXX_STANDARD 17)
-target_include_directories(tests PUBLIC ${CMAKE_BINARY_DIR}/_deps/spare-time-src)
-target_link_libraries(tests ncurses pthread m)
-target_link_libraries(tests "${TORCH_LIBRARIES}")
