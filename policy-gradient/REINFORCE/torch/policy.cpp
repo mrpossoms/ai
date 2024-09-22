@@ -95,13 +95,46 @@ torch::Tensor policy::Continuous::forward(torch::Tensor x)
 	return x;
 }
 
-const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
+torch::Tensor policy::Continuous::tensor_from_state(Environment& env)
 {
 	const auto x = env.get_state_vector();
 	auto x_t = torch::from_blob((void*)x.data(), {1, (long)x.size()}, torch::kFloat).clone();
 	assert(!torch::any(torch::isnan(x_t)).item<bool>());
+	return x_t;
+}
 
+torch::Tensor policy::Continuous::action_sigma(const torch::Tensor& a_dist_params)
+{
+	// return torch::ones({2}) * 0.3f;
+	return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
+}
+
+torch::Tensor gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)
+{
+	return (1/(torch::sqrt(var * 2 * M_PI))) * torch::exp(-((x - mu).pow(2) / (2 * var)));
+}
+
+torch::Tensor policy::Continuous::action_probabilities(const torch::Tensor& a_dist_params, const torch::Tensor& a)
+{
+	// constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
+	auto mu = a_dist_params.index({0, Slice(0, action_size())});
+	auto sigma = action_sigma(a_dist_params);
+	auto var = sigma.pow(2);
+
+	// auto eps = 1e-3;
+	// auto a_eps = torch::ones_like(a) * eps;
+	// return torch::abs(gaussian(a + a_eps, mu, var) - gaussian(a, mu, var)) * eps;
+
+	// return torch::clamp(gaussian(a, mu, var), 0.0001f, 0.9999f);
+
+	return gaussian(a, mu, var);
+}
+
+const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
+{
+	auto x_t = policy::Continuous::tensor_from_state(env);
 	auto a_dist_params = forward(x_t);
+
 #ifdef DEBUG
 	std::cout << "x:" << x_t << std::endl;
 	std::cout << "a_dist_params:" << a_dist_params << std::endl;
@@ -111,7 +144,7 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 	assert(a_dist_params.sizes() == torch::IntArrayRef({1, 4}));
 
 	auto mu = a_dist_params.index({0, Slice(0, action_size())});
-	auto sigma = torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
+	auto sigma = action_sigma(a_dist_params);
 	std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma[0].item<float>());
 	std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma[1].item<float>());
 
@@ -124,10 +157,8 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 
 	auto reward = env.step_reward(u);
 	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
-
-	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 	auto u_t = torch::from_blob(u, {1, 2}, torch::kFloat).clone();
-	auto a_probs = ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((u_t - mu) / sigma).pow(2)));
+	auto a_probs = action_probabilities(a_dist_params, u_t);
 
 	traj.push_back({x_t, a_probs, u_t, (unsigned)0, reward_t});
 
@@ -139,6 +170,7 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 {
 	zero_grad();
 
+// 	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 // 	for (unsigned t = 0; t < traj.size(); t++)
 // 	{
 // 		const auto f_t = traj[t];
@@ -152,7 +184,7 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 // #ifdef DEBUG
 // 		std::cout << "mu: " << mu << std::endl;
 // #endif
-// 		auto sigma = torch::log(torch::exp(f_t.action_probs.index({Slice(2, 4)})) + 1);
+// 		auto sigma = torch::ones({2}) * 0.3f; //torch::log(torch::exp(f_t.action_probs.index({Slice(2, 4)})) + 1);
 // #ifdef DEBUG
 // 		std::cout << "sigma: " << sigma << std::endl;
 // #endif
@@ -164,6 +196,9 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 
 	// auto u = traj.actions.index({Slice(0, traj.size()), Slice(0, 2)});
 	// auto probs = ((1/(sigmas * sqrt_2pi)) * torch::exp(-0.5 * ((u - mus) / sigmas).pow(2)));
+
+
+/////////////////////////////////
 	auto prob_prods = traj.action_probs.prod(1);
 	auto r = (prob_prods * traj.rewards).sum() / static_cast<float>(traj.size());
 
@@ -180,6 +215,8 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 #endif
 
 	r.backward(); //{}, retain_graph={true});
+
+////////////////////////////////
 
 // 	for (unsigned t = 0; t < traj.size(); t++)
 // 	{

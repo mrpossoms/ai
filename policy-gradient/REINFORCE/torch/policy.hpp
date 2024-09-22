@@ -121,6 +121,10 @@ namespace policy
 	{
 		Continuous();
 		torch::Tensor forward(torch::Tensor x);
+		torch::Tensor action_sigma(const torch::Tensor& a_dist_params);
+		torch::Tensor action_probabilities(const torch::Tensor& a_dist_params, const torch::Tensor& a);
+
+		static torch::Tensor tensor_from_state(Environment& env);
 
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
