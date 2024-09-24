@@ -93,31 +93,31 @@ private:
 
 namespace policy
 {
-	struct Policy
+	struct Policy : public torch::nn::Module
 	{
 		// virtual bool load_params(const std::string& path) = 0;
 		// virtual void save_params(const std::string& path) = 0;
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) = 0;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) = 0;
-		virtual size_t output_size() { return action_size(); }
-		virtual size_t action_size() = 0;
-		virtual size_t observation_size() = 0;
+		virtual long output_size() { return action_size(); }
+		virtual long action_size() = 0;
+		virtual long observation_size() = 0;
 	};
 
-	struct Discrete : public Policy, torch::nn::Module
+	struct Discrete : public Policy
 	{
 		Discrete();
 		torch::Tensor forward(torch::Tensor x);
 
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
-		virtual size_t action_size() override { return 4; }
-		virtual size_t observation_size() override { return 4; }
+		virtual long action_size() override { return 4; }
+		virtual long observation_size() override { return 4; }
 	private:
 		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr, l3 = nullptr;
 	};
 
-	struct Continuous : public Policy, torch::nn::Module
+	struct Continuous : public Policy
 	{
 		Continuous();
 		torch::Tensor forward(torch::Tensor x);
@@ -125,14 +125,17 @@ namespace policy
 		torch::Tensor action_probabilities(const torch::Tensor& a_dist_params, const torch::Tensor& a);
 
 		static torch::Tensor tensor_from_state(Environment& env);
+		static void train(const trajectory::Trajectory& traj, Policy& policy, float learning_rate);
 
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
-		virtual size_t action_size() override { return 2; }
-		virtual size_t output_size() override { return 4; }
-		virtual size_t observation_size() override { return 4; }
+		virtual long action_size() override { return 2; }
+		virtual long output_size() override { return 4; }
+		virtual long observation_size() override { return 4; }
 
 	private:
-		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
+		torch::nn::Linear l0 = nullptr; //, l1 = nullptr, l2 = nullptr;
 	};
+
+	torch::Tensor gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var);
 }

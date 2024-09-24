@@ -81,16 +81,16 @@ void policy::Discrete::train(const trajectory::Trajectory& traj, float learning_
 
 policy::Continuous::Continuous()
 {
-	l0 = { register_module("l0", torch::nn::Linear(observation_size(), 16)) };
-	l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
-	l2 = { register_module("l2", torch::nn::Linear(16, output_size())) };
+	l0 = { register_module("l0", torch::nn::Linear(observation_size(), output_size())) };
+	// l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
+	// l2 = { register_module("l2", torch::nn::Linear(16, output_size())) };
 }
 
 torch::Tensor policy::Continuous::forward(torch::Tensor x)
 {
-	x = torch::leaky_relu(l0->forward(x));
-	x = torch::leaky_relu(l1->forward(x));
-	x = torch::leaky_relu(l2->forward(x), 1);
+	x = torch::leaky_relu(l0->forward(x), 1);
+	// x = torch::leaky_relu(l1->forward(x));
+	// x = torch::leaky_relu(l2->forward(x), 1);
 
 	return x;
 }
@@ -105,11 +105,11 @@ torch::Tensor policy::Continuous::tensor_from_state(Environment& env)
 
 torch::Tensor policy::Continuous::action_sigma(const torch::Tensor& a_dist_params)
 {
-	// return torch::ones({2}) * 0.3f;
-	return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
+	return torch::ones({2}) * 0.445f;
+	// return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
 }
 
-torch::Tensor gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)
+torch::Tensor policy::gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)
 {
 	return (1/(torch::sqrt(var * 2 * M_PI))) * torch::exp(-((x - mu).pow(2) / (2 * var)));
 }
@@ -127,7 +127,7 @@ torch::Tensor policy::Continuous::action_probabilities(const torch::Tensor& a_di
 
 	// return torch::clamp(gaussian(a, mu, var), 0.0001f, 0.9999f);
 
-	return gaussian(a, mu, var);
+	return policy::gaussian(a, mu, var);
 }
 
 const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
@@ -135,10 +135,10 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 	auto x_t = policy::Continuous::tensor_from_state(env);
 	auto a_dist_params = forward(x_t);
 
-#ifdef DEBUG
+// #ifdef DEBUG
 	std::cout << "x:" << x_t << std::endl;
 	std::cout << "a_dist_params:" << a_dist_params << std::endl;
-#endif
+// #endif
 	// assert that the output is a 1x4 tensor and not nan
 	assert(!torch::any(torch::isnan(a_dist_params)).item<bool>());
 	assert(a_dist_params.sizes() == torch::IntArrayRef({1, 4}));
@@ -165,6 +165,42 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 	return a_probs;
 }
 
+void policy::Continuous::train(const trajectory::Trajectory& traj, Policy& policy, float learning_rate)
+{
+	policy.zero_grad();
+
+/////////////////////////////////
+	std::cout << "traj.action_probs: " << traj.action_probs << std::endl;
+	auto prob_prods = traj.action_probs.prod(1);
+	std::cout << "prob_prods: "<< prob_prods << std::endl;
+	auto r_sum = (prob_prods * traj.rewards).sum();
+	std::cout << "r_sum: "<< r_sum << std::endl;
+	auto r = r_sum / static_cast<float>(traj.size());
+	std::cout << "r:" << r << std::endl;
+
+#ifdef DEBUG
+	std::cout << "action_probs: " << traj.action_probs << std::endl;
+	std::cout << "us: " << u << std::endl;
+	std::cout << "mus: " << mus << std::endl;
+	std::cout << "sigmas: " << sigmas << std::endl;
+	std::cout << "probs: " << probs << std::endl;
+	std::cout << "prob_prods: " << prob_prods << std::endl;
+	std::cout << "rewards: " << traj.rewards << std::endl;
+	std::cout << "r: " << r << std::endl;
+	exit(0);
+#endif
+
+	r.backward(); //{}, retain_graph={true});
+
+////////////////////////////////
+
+	for (auto& param : policy.parameters())
+	{
+		auto g = param.grad();
+		std::cout << "g: " << g << std::endl;
+		param.data() += g * learning_rate;
+	}
+}
 
 void policy::Continuous::train(const trajectory::Trajectory& traj, float learning_rate)
 {
@@ -199,8 +235,13 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 
 
 /////////////////////////////////
+	// std::cout << "traj.action_probs: " << traj.action_probs << std::endl;
 	auto prob_prods = traj.action_probs.prod(1);
-	auto r = (prob_prods * traj.rewards).sum() / static_cast<float>(traj.size());
+	// std::cout << "prob_prods: "<< prob_prods << std::endl;
+	auto r_sum = (prob_prods * traj.rewards).sum();
+	// std::cout << "r_sum: "<< r_sum << std::endl;
+	auto r = r_sum / static_cast<float>(traj.size());
+	// std::cout << "r:" << r << std::endl;
 
 #ifdef DEBUG
 	std::cout << "action_probs: " << traj.action_probs << std::endl;
@@ -242,6 +283,7 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 	for (auto& param : parameters())
 	{
 		auto g = param.grad();
+		std::cout << "g: " << g << std::endl;
 		param.data() += g * learning_rate;
 	}
 }
