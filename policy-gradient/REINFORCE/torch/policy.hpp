@@ -97,6 +97,7 @@ namespace policy
 	{
 		// virtual bool load_params(const std::string& path) = 0;
 		// virtual void save_params(const std::string& path) = 0;
+		virtual torch::Tensor forward(torch::Tensor x) = 0;
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) = 0;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) = 0;
 		virtual long output_size() { return action_size(); }
@@ -107,7 +108,7 @@ namespace policy
 	struct Discrete : public Policy
 	{
 		Discrete();
-		torch::Tensor forward(torch::Tensor x);
+		virtual torch::Tensor forward(torch::Tensor x) override;
 
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
@@ -120,7 +121,7 @@ namespace policy
 	struct Continuous : public Policy
 	{
 		Continuous();
-		torch::Tensor forward(torch::Tensor x);
+		virtual torch::Tensor forward(torch::Tensor x) override;
 		torch::Tensor action_sigma(const torch::Tensor& a_dist_params);
 		torch::Tensor action_probabilities(const torch::Tensor& a_dist_params, const torch::Tensor& a);
 

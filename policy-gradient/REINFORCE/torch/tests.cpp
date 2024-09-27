@@ -86,7 +86,7 @@ struct Dummy : public policy::Policy
 		// constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 		auto mu = a_dist_params.index({0, Slice(0, action_size())});
 		auto sigma = action_sigma(a_dist_params);
-		auto var = sigma.pow(2);
+		auto var = sigma; //.pow(2);
 
 		// auto eps = 1e-3;
 		// auto a_eps = torch::ones_like(a) * eps;
@@ -99,8 +99,8 @@ struct Dummy : public policy::Policy
 
 	torch::Tensor action_sigma(const torch::Tensor& a_dist_params)
 	{
-		return torch::ones({1}) * 0.445f;
-		// return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
+		// return torch::ones({1}) * 0.445f;
+		return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
 	}
 
 	virtual void train(const trajectory::Trajectory& traj, float learning_rate) override{}
@@ -206,8 +206,8 @@ void check_policy_optimization_continuous()
 		sigmas.push_back(sigma[0].item<float>());
 		std::cout << "pr: " << pr[0][0].item<float>() << " mu: " << mu[0].item<float>() << " sig: " << sigmas[sigmas.size()-1] << std::endl;
 		traj.push_back({x, pr, a, 0, r});
-		policy::Continuous::train(traj, policy, 0.1f);
 		plot_func_and_gradients(policy, i);
+		policy::Continuous::train(traj, policy, 0.1f);
 
 		traj.clear();
 		std::cout << "======================" << std::endl;
