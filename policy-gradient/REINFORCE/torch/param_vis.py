@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import matplotlib.animation as animation
+from matplotlib.widgets import Slider
 import glob
 
 
@@ -24,30 +25,34 @@ for file in csv_files:
 print(csv_files)
 
 # Setup the figure and axis for the animation
-fig, ax = plt.subplots()
+fig = plt.figure()
+ax = fig.add_subplot(1, 2, 1)
 
 # Initialize empty line objects for each parameter
-line_w0, = ax.plot([], [], label='w0')
-line_w1, = ax.plot([], [], label='w1')
-line_b0, = ax.plot([], [], label='b0')
-line_b1, = ax.plot([], [], label='b1')
+line_pr, = ax.plot([], [], label='pr')
+line_gw0, = ax.plot([], [], label='gw0')
+line_gw1, = ax.plot([], [], label='gw1')
+line_gb0, = ax.plot([], [], label='gb0')
+line_gb1, = ax.plot([], [], label='gb1')
 
 # Set up the plot limits and labels
-# ax.set_xlim(0, 100)  # Adjust x-limits based on your data
-ax.set_ylim(-5, 5)   # Adjust y-limits based on your data
+ax.set_xlim(-6, 6)  # Adjust x-limits based on your data
+ax.set_ylim(-2, 4)   # Adjust y-limits based on your data
+ax.axvline(x=1, color='gray', linestyle='--', linewidth=1)
 ax.legend()
 
 # Initialize the plot
 def init():
     print('init')
-    line_w0.set_data([], [])
-    line_w1.set_data([], [])
-    line_b0.set_data([], [])
-    line_b1.set_data([], [])
-    return line_w0, line_w1, line_b0, line_b1
+    line_pr.set_data([], [])
+    line_gw0.set_data([], [])
+    line_gw1.set_data([], [])
+    line_gb0.set_data([], [])
+    line_gb1.set_data([], [])
+    return line_pr, line_gw1, line_gb0, line_gb1
 
 # Update function for the animation
-def update(i, line_w0, line_w1, line_b0, line_b1):
+def update(i, line_pr, line_w1, line_b0, line_b1):
     # Load the i-th CSV file
     tbl = pd.read_csv(csv_files[i])
     if i == 0:
@@ -58,29 +63,35 @@ def update(i, line_w0, line_w1, line_b0, line_b1):
     # thing possibly worth visualizing are the gradients and probability that are otherwise visualized
     # in the static plot
     x = tbl['x']
-    w0 = tbl['pr']
-    print(w0)
-    w1 = tbl['w1']
-    b0 = tbl['b0']
-    b1 = tbl['b1']
 
     # Update the lines with new data
-    line_w0.set_data(x, w0)
-    line_w1.set_data(x, w1)
-    line_b0.set_data(x, b0)
-    line_b1.set_data(x, b1)
+    line_pr.set_data(x, tbl['pr'])
+    line_gw0.set_data(x, tbl['gw0'])
+    line_gw1.set_data(x, tbl['gw1'])
+    line_gb0.set_data(x, tbl['gb0'])
+    line_gb1.set_data(x, tbl['gb1'])
 
-    return line_w0, line_w1, line_b0, line_b1
+    return line_pr, line_gw0, line_gw1, line_gb0, line_gb1
 
 # Create the animation object
-ani = animation.FuncAnimation(fig, update, len(csv_files), fargs=(line_w0, line_w1, line_b0, line_b1), init_func=init, blit=True, repeat=True)
+# ani = animation.FuncAnimation(fig, update, len(csv_files), fargs=(line_pr, line_gw1, line_gb0, line_gb1), init_func=init, blit=True, repeat=True)
+
+ax_slider = plt.axes([0.25, 0.02, 0.65, 0.03], facecolor='lightgoldenrodyellow')  # x, y, width, height
+slider = Slider(ax_slider, 'Frame', 0, len(csv_files)-1, valinit=0, valfmt='%0.0f')
+
+# Update the animation when the slider is changed
+def on_slider_change(val):
+    frame = int(slider.val)
+    update(frame, line_pr, line_gw1, line_gb0, line_gb1)
+
+slider.on_changed(on_slider_change)
+
+ax = fig.add_subplot(1, 2, 2)
+ax.plot(T['w0'], label='w0')
+ax.plot(T['w1'], label='w1')
+ax.plot(T['b0'], label='b0')
+ax.plot(T['b1'], label='b1')
+ax.legend()
 
 # Display the plot
-plt.show()
-
-plt.plot(T['w0'], label='w0')
-plt.plot(T['w1'], label='w1')
-plt.plot(T['b0'], label='b0')
-plt.plot(T['b1'], label='b1')
-plt.legend()
 plt.show()

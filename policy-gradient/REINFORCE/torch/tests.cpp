@@ -99,8 +99,8 @@ struct Dummy : public policy::Policy
 
 	torch::Tensor action_sigma(const torch::Tensor& a_dist_params)
 	{
-		// return torch::ones({1}) * 0.445f;
-		return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
+		return torch::ones({1}) * 0.445f;
+		// return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
 	}
 
 	virtual void train(const trajectory::Trajectory& traj, float learning_rate) override{}
@@ -113,8 +113,8 @@ struct Dummy : public policy::Policy
 
 void plot_func_and_gradients(Dummy& policy, int iteration)
 {
-	constexpr auto min_x = -3.f;
-	constexpr auto max_x = 3.f;
+	constexpr auto min_x = -6.f;
+	constexpr auto max_x = 6.f;
 
 	std::vector<float> x;
 	std::vector<float> y;
@@ -124,7 +124,7 @@ void plot_func_and_gradients(Dummy& policy, int iteration)
 	std::vector<float> b0, b1;
 	std::vector<float> gb0, gb1;
 
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i < 200; i++)
 	{
 		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
 
