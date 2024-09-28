@@ -121,13 +121,14 @@ namespace policy
 	struct Continuous : public Policy
 	{
 		Continuous();
-		virtual torch::Tensor forward(torch::Tensor x) override;
 		torch::Tensor action_sigma(const torch::Tensor& a_dist_params);
 		torch::Tensor action_probabilities(const torch::Tensor& a_dist_params, const torch::Tensor& a);
 
 		static torch::Tensor tensor_from_state(Environment& env);
 		static void train(const trajectory::Trajectory& traj, Policy& policy, float learning_rate);
+		static torch::Tensor action_probabilities(const torch::Tensor& a, const torch::Tensor& mu, const torch::Tensor& var);
 
+		virtual torch::Tensor forward(torch::Tensor x) override;		
 		virtual const torch::Tensor act(Environment& env, trajectory::Trajectory& traj) override;
 		virtual void train(const trajectory::Trajectory& traj, float learning_rate) override;
 		virtual long action_size() override { return 2; }

@@ -206,6 +206,11 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, Policy& polic
 	}
 }
 
+static torch::Tensor action_probabilities(const torch::Tensor& a, const torch::Tensor& mu, const torch::Tensor& var)
+{
+	return policy::gaussian(a, mu, var);
+}
+
 void policy::Continuous::train(const trajectory::Trajectory& traj, float learning_rate)
 {
 	zero_grad();

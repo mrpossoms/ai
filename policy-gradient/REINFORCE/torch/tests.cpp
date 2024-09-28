@@ -111,7 +111,8 @@ struct Dummy : public policy::Policy
 	torch::nn::Linear layer = { nullptr };
 };
 
-void plot_func_and_gradients(Dummy& policy, int iteration)
+template <typename P>
+void plot_func_and_gradients(P& policy, int iteration)
 {
 	constexpr auto min_x = -6.f;
 	constexpr auto max_x = 6.f;
@@ -128,36 +129,39 @@ void plot_func_and_gradients(Dummy& policy, int iteration)
 	{
 		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
 
-		auto x_0 = torch::ones({1, 1});
-		auto x_t = torch::ones({1, 1}) * (i * ((max_x - min_x) / 100.f) + min_x);
+		auto x_0 = torch::ones({1, policy.observation_size()});
+		auto x_t = torch::ones({1, policy.observation_size()}) * (i * ((max_x - min_x) / 100.f) + min_x);
 		auto r = torch::ones({1});
 		auto y_t = policy.forward(x_t);
-		auto pr = policy.action_probabilities(y_t, x_t);
+
+		auto a_t = x_t.index({0, Slice(0, policy.action_size())}); 
+		auto pr = policy.action_probabilities(y_t, a_t);
+		
 		pr.retain_grad();
 
-		traj.push_back({x_0, pr, x_t, 0, r});
+		traj.push_back({x_0, pr, a_t, 0, r});
 		policy.zero_grad();
 		policy::Continuous::train(traj, policy, 0.0f);
 
-		x.push_back(x_t.item<float>());
-		y.push_back(pr.item<float>());
+		x.push_back(x_t.flatten()[0].template item<float>());
+		y.push_back(pr.flatten()[0].template item<float>());
 		
-		dpr.push_back(pr.grad()[0].item<float>());
+		dpr.push_back(pr.grad()[0].template item<float>());
 
 		for (const auto& param_pair : policy.named_parameters()) {
 			auto& name = param_pair.key();
 			auto& param = param_pair.value();
 			if (name == "l0.weight") {
-				w0.push_back(param[0].item<float>());
-				gw0.push_back(param.grad()[0].item<float>());
-				w1.push_back(param[1].item<float>());
-				gw1.push_back(param.grad()[1].item<float>());
+				w0.push_back(param[0].template item<float>());
+				gw0.push_back(param.grad()[0].template item<float>());
+				w1.push_back(param[1].template item<float>());
+				gw1.push_back(param.grad()[1].template item<float>());
 			}
 			else if (name == "l0.bias") {
-				gb0.push_back(param.grad()[0].item<float>());
-				b0.push_back(param[0].item<float>());
-				gb1.push_back(param.grad()[1].item<float>());
-				b1.push_back(param[1].item<float>());
+				gb0.push_back(param.grad()[0].template item<float>());
+				b0.push_back(param[0].template item<float>());
+				gb1.push_back(param.grad()[1].template item<float>());
+				b1.push_back(param[1].template item<float>());
 			}
 		}
 	}
@@ -181,8 +185,8 @@ void plot_func_and_gradients(Dummy& policy, int iteration)
 
 void check_policy_optimization_continuous()
 {
-	// policy::Continuous policy;
-	Dummy policy;
+	policy::Continuous policy;
+	// Dummy policy;
 	Environment env;
 	trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
 
