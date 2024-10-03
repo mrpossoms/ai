@@ -57,7 +57,7 @@ void update()
 			}
 
 			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj->size(), 0, 0.001});
-			P->train(*traj, 0.01f);
+			P->train(*traj, 0.001f);
 			episode++;
 
 			env.reset();
@@ -71,7 +71,7 @@ int main(int argc, char* argv[])
 {
 	// policy::init(4, 4);
 	P = std::make_shared<Policy>();
-	traj = std::make_shared<trajectory::Trajectory>(64, P->observation_size(), P->action_size());
+	traj = std::make_shared<trajectory::Trajectory>(64, P->observation_size(), P->action_size(), P->output_size());
 
 	try
 	{

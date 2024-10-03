@@ -56,7 +56,7 @@ const torch::Tensor policy::Discrete::act(Environment& env, trajectory::Trajecto
 	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
 	auto action = torch::ones({1, 4}) * 0.01;
 	action.index_put_({0, a}, 1);
-	traj.push_back({x_t, a_probs, action, (unsigned)a, reward_t});
+	traj.push_back({x_t, a_probs, a_probs, action, (unsigned)a, reward_t});
 	return a_probs;
 }
 
@@ -88,9 +88,10 @@ policy::Continuous::Continuous()
 
 torch::Tensor policy::Continuous::forward(torch::Tensor x)
 {
-	x = torch::leaky_relu(l0->forward(x), 1);
+	x = l0->forward(x);
+	// x = torch::leaky_relu(l0->forward(x));
 	// x = torch::leaky_relu(l1->forward(x));
-	// x = torch::leaky_relu(l2->forward(x), 1);
+	// x = l2->forward(x);
 
 	return x;
 }
@@ -105,15 +106,15 @@ torch::Tensor policy::Continuous::tensor_from_state(Environment& env)
 
 torch::Tensor policy::Continuous::action_sigma(const torch::Tensor& a_dist_params)
 {
-	// return torch::ones({2}) * 0.445f;
-	return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.01f;
+	return torch::ones({2}) * 0.445f;
+	// return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1);
 }
 
 torch::Tensor policy::gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)
 {
-	auto mag = 1/(torch::sqrt(var * 2 * M_PI));
-	auto g =  (1/(torch::sqrt(var * 2 * M_PI))) * torch::exp(-((x - mu).pow(2) / (2 * var)));
-	return g / mag;
+	// auto mag = 1/(torch::sqrt(var * 2 * M_PI));
+	auto g =  torch::exp(-((x - mu).pow(2) / (2 * var)));
+	return g;// / mag;
 	// auto exp = 1 / torch::exp(((x - mu).pow(2) / (var)));
 	// return exp * (1 - exp) * 0.05 * torch::sqrt((x-mu).pow(2));
 }
@@ -131,7 +132,7 @@ torch::Tensor policy::Continuous::action_probabilities(const torch::Tensor& a_di
 
 	// return torch::clamp(gaussian(a, mu, var), 0.0001f, 0.9999f);
 
-	return policy::gaussian(a, mu, var);
+	return torch::exp(-((a - mu).pow(2) / (2 * var)));
 }
 
 const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
@@ -144,7 +145,15 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 	// std::cout << "a_dist_params:" << a_dist_params << std::endl;
 // #endif
 	// assert that the output is a 1x4 tensor and not nan
-	assert(!torch::any(torch::isnan(a_dist_params)).item<bool>());
+	if (torch::any(torch::isnan(a_dist_params)).item<bool>())
+	{
+		std::cout << "x_t: " << x_t << std::endl;
+		std::cout << "a_dist_params: " << a_dist_params << std::endl;
+		std::cout << "-------------------------------" << std::endl;
+		print_params();
+		assert(!torch::any(torch::isnan(a_dist_params)).item<bool>());
+	}
+
 	assert(a_dist_params.sizes() == torch::IntArrayRef({1, 4}));
 
 	auto mu = a_dist_params.index({0, Slice(0, action_size())});
@@ -164,7 +173,7 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 	auto u_t = torch::from_blob(u, {1, 2}, torch::kFloat).clone();
 	auto a_probs = action_probabilities(a_dist_params, u_t);
 
-	traj.push_back({x_t, a_probs, u_t, (unsigned)0, reward_t});
+	traj.push_back({x_t, a_dist_params, a_probs, u_t, (unsigned)0, reward_t});
 
 	return a_probs;
 }
@@ -208,7 +217,17 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, Policy& polic
 
 static torch::Tensor action_probabilities(const torch::Tensor& a, const torch::Tensor& mu, const torch::Tensor& var)
 {
-	return policy::gaussian(a, mu, var);
+	auto prob = policy::gaussian(a, mu, var);
+	if (torch::any(prob <= 0).item<bool>())
+	{
+		std::cout << "a: " << a << std::endl;
+		std::cout << "mu: " << mu << std::endl;
+		std::cout << "var: " << var << std::endl;
+		std::cout << "prob: " << prob << std::endl;
+		assert(false);
+	}
+	
+	return prob;
 }
 
 void policy::Continuous::train(const trajectory::Trajectory& traj, float learning_rate)
@@ -252,46 +271,28 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 	auto r = r_sum / static_cast<float>(traj.size());
 	// std::cout << "r:" << r << std::endl;
 
-#ifdef DEBUG
-	std::cout << "action_probs: " << traj.action_probs << std::endl;
-	std::cout << "us: " << u << std::endl;
-	std::cout << "mus: " << mus << std::endl;
-	std::cout << "sigmas: " << sigmas << std::endl;
-	std::cout << "probs: " << probs << std::endl;
-	std::cout << "prob_prods: " << prob_prods << std::endl;
-	std::cout << "rewards: " << traj.rewards << std::endl;
-	std::cout << "r: " << r << std::endl;
-	exit(0);
-#endif
-
 	r.backward(); //{}, retain_graph={true});
 
 ////////////////////////////////
 
-// 	for (unsigned t = 0; t < traj.size(); t++)
-// 	{
-// 		const auto f_t = traj[t];
-// #ifdef DEBUG
-// 		std::cout << "f_t.action_probs: " << f_t.action_probs << std::endl;
-// 		std::cout << "f_t.action: " << f_t.action << std::endl;
-// 		std::cout << "f_t.reward: " << f_t.reward << std::endl;
-// #endif
-
-// 		auto mu = f_t.action_probs.index({Slice(0, 2)});
-// #ifdef DEBUG
-// 		std::cout << "mu: " << mu << std::endl;
-// #endif
-// 		auto sigma = torch::log(torch::exp(f_t.action_probs.index({Slice(2, 4)})) + 1);
-// #ifdef DEBUG
-// 		std::cout << "sigma: " << sigma << std::endl;
-// #endif
-// 		auto probs = ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((f_t.action.index({Slice(0, 2)}) - mu) / sigma).pow(2)));
-// 		(probs.prod() * f_t.reward).backward({}, true);
-// 	}
-
 	for (auto& param : parameters())
 	{
 		auto g = param.grad();
+
+		if (torch::any(torch::isnan(g)).item<bool>())
+		{
+			print_params();
+			std::cout << "--------------------------------\n";
+			std::cout << "states: " << traj.states << std::endl;
+			std::cout << "actions: " << traj.outputs << std::endl;
+			std::cout << "action_probs: " << traj.action_probs << std::endl;
+			std::cout << "prob_prods: " << prob_prods << std::endl;
+			std::cout << "rewards: " << traj.rewards << std::endl;
+			std::cout << "r: " << r << std::endl;		
+
+			assert(!torch::any(torch::isnan(g)).item<bool>());
+		}
+
 		// std::cout << "g: " << g << std::endl;
 		param.data() += g * learning_rate;
 	}

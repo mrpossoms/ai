@@ -13,6 +13,7 @@ namespace trajectory
 	struct Frame
 	{
 		torch::Tensor state;
+		torch::Tensor output;
 		torch::Tensor action_probs;
 		torch::Tensor action;
 		unsigned action_idx;
@@ -21,9 +22,10 @@ namespace trajectory
 
 struct Trajectory
 {
-	Trajectory(int length, int observation_size, int action_size)
+	Trajectory(int length, int observation_size, int action_size, int output_size)
 	{
 		states = torch::zeros({length, observation_size});
+		outputs = torch::zeros({length, output_size});
 		action_probs = torch::zeros({length, action_size});
 		actions = torch::zeros({length, action_size});
 		rewards = torch::zeros({length, 1});
@@ -45,6 +47,7 @@ struct Trajectory
 	{
 		return Frame{
 			states[idx],
+			outputs[idx],
 			action_probs[idx],
 			actions[idx],
 			(unsigned)actions[idx].argmax().item<int>(),
@@ -61,6 +64,7 @@ struct Trajectory
 			// actions.index_put_({_size}, frame.action);
 			// rewards.index_put_({_size}, frame.reward);
 			states[_size] = frame.state.flatten();
+			outputs[_size] = frame.output.flatten();
 			action_probs[_size] = frame.action_probs.flatten();
 			actions[_size] = frame.action.flatten();
 			rewards[_size] = frame.reward;
@@ -80,6 +84,7 @@ struct Trajectory
 	const size_t size() const { return _size; }
 
 	torch::Tensor states;
+	torch::Tensor outputs;
 	torch::Tensor action_probs;
 	torch::Tensor actions;
 	torch::Tensor rewards;
@@ -103,6 +108,16 @@ namespace policy
 		virtual long output_size() { return action_size(); }
 		virtual long action_size() = 0;
 		virtual long observation_size() = 0;
+		void print_params()
+		{
+			for (auto& param_pair : named_parameters())
+			{
+				auto& name = param_pair.key();
+				auto& param = param_pair.value();
+				std::cout << name << std::endl;
+				std::cout << param << std::endl;
+			}
+		}
 	};
 
 	struct Discrete : public Policy
@@ -136,7 +151,7 @@ namespace policy
 		virtual long observation_size() override { return 4; }
 
 	private:
-		torch::nn::Linear l0 = nullptr; //, l1 = nullptr, l2 = nullptr;
+		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
 	};
 
 	torch::Tensor gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var);

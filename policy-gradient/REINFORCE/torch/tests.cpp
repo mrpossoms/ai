@@ -117,74 +117,68 @@ void plot_func_and_gradients(P& policy, int iteration)
 	constexpr auto min_x = -6.f;
 	constexpr auto max_x = 6.f;
 
-	std::vector<float> x;
-	std::vector<float> y;
-	std::vector<float> dpr;
-	std::vector<float> w0, w1;
-	std::vector<float> gw0, gw1;
-	std::vector<float> b0, b1;
-	std::vector<float> gb0, gb1;
+	std::map<std::string, std::vector<float>> data;
 
 	for (int i = 0; i < 200; i++)
 	{
 		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
 
 		auto x_0 = torch::ones({1, policy.observation_size()});
-		auto x_t = torch::ones({1, policy.observation_size()}) * (i * ((max_x - min_x) / 100.f) + min_x);
+		auto a_t = torch::zeros({1, policy.action_size()});
+		a_t[0][0] = (i * ((max_x - min_x) / 100.f) + min_x);
+		if (policy.action_size() > 1)
+			a_t[0][1] = (i * ((max_x - min_x) / 100.f) + min_x);
+	
 		auto r = torch::ones({1});
-		auto y_t = policy.forward(x_t);
+		auto y_t = policy.forward(x_0);
 
-		auto a_t = x_t.index({0, Slice(0, policy.action_size())}); 
 		auto pr = policy.action_probabilities(y_t, a_t);
+
+		data["x"].push_back(a_t.flatten()[0].template item<float>());
+
+		data["pr"].push_back(pr.prod().template item<float>());
+		// data["pr"].push_back(pr[0].template item<float>());
+
+		auto pr_flat = pr.flatten();
+		for (int j = 0; j < pr_flat.size(0); j++)
+		{
+			data["pr"+std::to_string(j)].push_back(pr_flat[j].template item<float>());
+		}
+
+		auto y_t_flat = y_t.flatten();
+		for (int j = 0; j < y_t_flat.size(0); j++)
+		{
+			data["y"+std::to_string(j)].push_back(y_t_flat[j].template item<float>());
+		}
+
+		for (const auto& param_pair : policy.named_parameters()) {
+			auto& name = param_pair.key();
+			auto& param = param_pair.value();
+
+			auto param_flat = param.flatten();
+			for (int j = 0; j < param_flat.size(0); j++)
+			{
+				data[name + std::to_string(j)].push_back(param_flat[j].template item<float>());
+			}
+		}
+
+		write_csv("/tmp/plot" + std::to_string(iteration) + ".csv", data);
 		
-		pr.retain_grad();
+		// pr.retain_grad();
 
 		traj.push_back({x_0, pr, a_t, 0, r});
 		policy.zero_grad();
 		policy::Continuous::train(traj, policy, 0.0f);
 
-		x.push_back(x_t.flatten()[0].template item<float>());
-		y.push_back(pr.flatten()[0].template item<float>());
-		
-		dpr.push_back(pr.grad()[0].template item<float>());
-
-		for (const auto& param_pair : policy.named_parameters()) {
-			auto& name = param_pair.key();
-			auto& param = param_pair.value();
-			if (name == "l0.weight") {
-				w0.push_back(param[0].template item<float>());
-				gw0.push_back(param.grad()[0].template item<float>());
-				w1.push_back(param[1].template item<float>());
-				gw1.push_back(param.grad()[1].template item<float>());
-			}
-			else if (name == "l0.bias") {
-				gb0.push_back(param.grad()[0].template item<float>());
-				b0.push_back(param[0].template item<float>());
-				gb1.push_back(param.grad()[1].template item<float>());
-				b1.push_back(param[1].template item<float>());
-			}
-		}
 	}
-
-	write_csv("/tmp/plot" + std::to_string(iteration) + ".csv", {
-		{"x", x}, 
-		{"pr", y}, 
-		{"dpr", dpr}, 
-		{"gw0", gw0}, 
-		{"w0", w0}, 
-		{"gw1", gw1}, 
-		{"w1", w1}, 
-		{"gb0", gb0}, 
-		{"b0", b0}, 
-		{"gb1", gb1},
-		{"b1", b1},
-	});
 }
 
 
 
 void check_policy_optimization_continuous()
 {
+	// seed for repeatable policy initialization
+	torch::manual_seed(0);
 	policy::Continuous policy;
 	// Dummy policy;
 	Environment env;
@@ -199,12 +193,18 @@ void check_policy_optimization_continuous()
 		std::cout << "i: " << i << std::endl;
 		auto x = torch::ones({1, policy.observation_size()});
 		auto y = policy.forward(x);
+		auto sigma = policy.action_sigma(y);
 		std::cout << "y: " << y << std::endl;
 
-		auto a = torch::ones({1, policy.action_size()});
+		auto a = torch::zeros({1, policy.action_size()});
+		auto y0 = y[0][0].item<float>();
+		auto s0 = sigma[0].item<float>();
+		auto da = std::clamp(4 - y0, -s0, s0);
+		a[0][0] = y0+da;
+		if (policy.action_size() > 1)
+			a[0][1] = -0.2;
 		auto r = torch::ones({1});
 		auto pr = policy.action_probabilities(y, a);
-		auto sigma = policy.action_sigma(y);
 		auto mu = y.index({0, Slice(0, policy.action_size())});
 		probabilities.push_back(pr[0][0].item<float>());
 		sigmas.push_back(sigma[0].item<float>());
