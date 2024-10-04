@@ -106,8 +106,8 @@ torch::Tensor policy::Continuous::tensor_from_state(Environment& env)
 
 torch::Tensor policy::Continuous::action_sigma(const torch::Tensor& a_dist_params)
 {
-	return torch::ones({2}) * 0.445f;
-	// return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1);
+	// return torch::ones({2}) * 0.1f;
+	return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1);
 }
 
 torch::Tensor policy::gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)
@@ -138,26 +138,26 @@ torch::Tensor policy::Continuous::action_probabilities(const torch::Tensor& a_di
 const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
 {
 	auto x_t = policy::Continuous::tensor_from_state(env);
-	auto a_dist_params = forward(x_t);
+	auto output = forward(x_t);
 
 // #ifdef DEBUG
 	// std::cout << "x:" << x_t << std::endl;
-	// std::cout << "a_dist_params:" << a_dist_params << std::endl;
+	// std::cout << "output:" << output << std::endl;
 // #endif
 	// assert that the output is a 1x4 tensor and not nan
-	if (torch::any(torch::isnan(a_dist_params)).item<bool>())
+	if (torch::any(torch::isnan(output)).item<bool>())
 	{
 		std::cout << "x_t: " << x_t << std::endl;
-		std::cout << "a_dist_params: " << a_dist_params << std::endl;
+		std::cout << "output: " << output << std::endl;
 		std::cout << "-------------------------------" << std::endl;
 		print_params();
-		assert(!torch::any(torch::isnan(a_dist_params)).item<bool>());
+		assert(!torch::any(torch::isnan(output)).item<bool>());
 	}
 
-	assert(a_dist_params.sizes() == torch::IntArrayRef({1, 4}));
+	assert(output.sizes() == torch::IntArrayRef({1, 4}));
 
-	auto mu = a_dist_params.index({0, Slice(0, action_size())});
-	auto sigma = action_sigma(a_dist_params);
+	auto mu = output.index({0, Slice(0, action_size())});
+	auto sigma = action_sigma(output);
 	std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma[0].item<float>());
 	std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma[1].item<float>());
 
@@ -170,10 +170,10 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 
 	auto reward = env.step_reward(u);
 	auto reward_t = torch::from_blob(&reward, {1}, torch::kFloat).clone();
-	auto u_t = torch::from_blob(u, {1, 2}, torch::kFloat).clone();
-	auto a_probs = action_probabilities(a_dist_params, u_t);
+	auto action_t = torch::from_blob(u, {1, 2}, torch::kFloat).clone();
+	auto a_probs = action_probabilities(output, action_t);
 
-	traj.push_back({x_t, a_dist_params, a_probs, u_t, (unsigned)0, reward_t});
+	traj.push_back({x_t, output, a_probs, action_t, (unsigned)0, reward_t});
 
 	return a_probs;
 }
@@ -284,8 +284,9 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 			print_params();
 			std::cout << "--------------------------------\n";
 			std::cout << "states: " << traj.states << std::endl;
-			std::cout << "actions: " << traj.outputs << std::endl;
-			std::cout << "action_probs: " << traj.action_probs << std::endl;
+			std::cout << "outputs: " << traj.outputs << std::endl;
+			std::cout << "action_probs: " << traj.f << std::endl;
+			std::cout << "actions:" << traj.actions << std::endl;
 			std::cout << "prob_prods: " << prob_prods << std::endl;
 			std::cout << "rewards: " << traj.rewards << std::endl;
 			std::cout << "r: " << r << std::endl;		
