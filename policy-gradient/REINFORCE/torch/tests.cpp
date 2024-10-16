@@ -41,7 +41,7 @@ void check_policy_probabilities_discrete()
 {
 	policy::Discrete policy;
 	Environment env;
-	trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
+	trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size(), policy.output_size());
 	assert(near(policy.act(env, traj).sum().item<float>(), 1.f));
 }
 
@@ -51,7 +51,7 @@ void check_policy_probabilities_continuous()
 	{
 		policy::Continuous policy;
 		Environment env;
-		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
+		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size(), policy.output_size());
 		
 		auto a = policy.act(env, traj); //.index({Slice(0, traj.size()), Slice(0, 2)});
 		for(unsigned i = 0; i < policy.action_size(); i++)
@@ -121,7 +121,7 @@ void plot_func_and_gradients(P& policy, int iteration)
 
 	for (int i = 0; i < 200; i++)
 	{
-		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
+		trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size(), policy.output_size());
 
 		auto x_0 = torch::ones({1, policy.observation_size()});
 		auto a_t = torch::zeros({1, policy.action_size()});
@@ -166,7 +166,7 @@ void plot_func_and_gradients(P& policy, int iteration)
 		
 		// pr.retain_grad();
 
-		traj.push_back({x_0, pr, a_t, 0, r});
+		traj.push_back({x_0, y_t, pr, a_t, 0, r});
 		policy.zero_grad();
 		policy::Continuous::train(traj, policy, 0.0f);
 
@@ -182,7 +182,7 @@ void check_policy_optimization_continuous()
 	policy::Continuous policy;
 	// Dummy policy;
 	Environment env;
-	trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size());
+	trajectory::Trajectory traj(1, policy.observation_size(), policy.action_size(), policy.output_size());
 
 	std::vector<float> probabilities;
 	std::vector<float> sigmas;
@@ -209,7 +209,7 @@ void check_policy_optimization_continuous()
 		probabilities.push_back(pr[0][0].item<float>());
 		sigmas.push_back(sigma[0].item<float>());
 		std::cout << "pr: " << pr[0][0].item<float>() << " mu: " << mu[0].item<float>() << " sig: " << sigmas[sigmas.size()-1] << std::endl;
-		traj.push_back({x, pr, a, 0, r});
+		traj.push_back({x, y, pr, a, 0, r});
 		plot_func_and_gradients(policy, i);
 		policy::Continuous::train(traj, policy, 0.1f);
 

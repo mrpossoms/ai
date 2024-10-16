@@ -82,16 +82,18 @@ void policy::Discrete::train(const trajectory::Trajectory& traj, float learning_
 policy::Continuous::Continuous()
 {
 	l0 = { register_module("l0", torch::nn::Linear(observation_size(), output_size())) };
-	// l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
-	// l2 = { register_module("l2", torch::nn::Linear(16, output_size())) };
+	
+	//l0 = { register_module("l0", torch::nn::Linear(observation_size(), 16)) };
+	//l1 = { register_module("l1", torch::nn::Linear(16, 16)) };
+	//l2 = { register_module("l2", torch::nn::Linear(16, output_size())) };
 }
 
 torch::Tensor policy::Continuous::forward(torch::Tensor x)
 {
 	x = l0->forward(x);
-	// x = torch::leaky_relu(l0->forward(x));
-	// x = torch::leaky_relu(l1->forward(x));
-	// x = l2->forward(x);
+	//x = torch::leaky_relu(l0->forward(x));
+	//x = torch::leaky_relu(l1->forward(x));
+	//x = torch::leaky_relu(l2->forward(x), 1);
 
 	return x;
 }
@@ -106,8 +108,8 @@ torch::Tensor policy::Continuous::tensor_from_state(Environment& env)
 
 torch::Tensor policy::Continuous::action_sigma(const torch::Tensor& a_dist_params)
 {
-	// return torch::ones({2}) * 0.1f;
-	return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1);
+	//return torch::ones({2}) * 0.1f;
+	return torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1);// + 0.01f;
 }
 
 torch::Tensor policy::gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)
@@ -121,7 +123,7 @@ torch::Tensor policy::gaussian(const torch::Tensor& x, const torch::Tensor& mu, 
 
 torch::Tensor policy::Continuous::action_probabilities(const torch::Tensor& a_dist_params, const torch::Tensor& a)
 {
-	// constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
+	constexpr auto sqrt_2pi = std::sqrt(2 * M_PI);
 	auto mu = a_dist_params.index({0, Slice(0, action_size())});
 	auto sigma = action_sigma(a_dist_params);
 	auto var = sigma.pow(2);
@@ -132,7 +134,8 @@ torch::Tensor policy::Continuous::action_probabilities(const torch::Tensor& a_di
 
 	// return torch::clamp(gaussian(a, mu, var), 0.0001f, 0.9999f);
 
-	return torch::exp(-((a - mu).pow(2) / (2 * var)));
+	// return ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((f_t.action - mu) / sigma).pow(2)));
+	return ((1/(sigma * sqrt_2pi)) * torch::exp(-0.5 * ((a - mu) / sigma).pow(2)));
 }
 
 const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajectory& traj)
@@ -158,8 +161,8 @@ const torch::Tensor policy::Continuous::act(Environment& env, trajectory::Trajec
 
 	auto mu = output.index({0, Slice(0, action_size())});
 	auto sigma = action_sigma(output);
-	std::normal_distribution<float> c_dist(mu[0].item<float>(), sigma[0].item<float>());
-	std::normal_distribution<float> r_dist(mu[1].item<float>(), sigma[1].item<float>());
+	std::normal_distribution<float> c_dist(mu[1].item<float>(), sigma[1].item<float>());
+	std::normal_distribution<float> r_dist(mu[0].item<float>(), sigma[0].item<float>());
 
 	static std::default_random_engine gen;
 	
@@ -210,7 +213,7 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, Policy& polic
 	for (auto& param : policy.parameters())
 	{
 		auto g = param.grad();
-		// std::cout << "g: " << g << std::endl;
+		std::cout << "g: " << g << std::endl;
 		param.data() += g * learning_rate;
 	}
 }
@@ -279,22 +282,23 @@ void policy::Continuous::train(const trajectory::Trajectory& traj, float learnin
 	{
 		auto g = param.grad();
 
-		if (torch::any(torch::isnan(g)).item<bool>())
+		if (torch::any(torch::isnan(g)).item<bool>() || torch::all(g == 0).item<bool>())
 		{
+			std::cout << "g: " << g << std::endl;
+			std::cout << "--------------------------------\n";
 			print_params();
 			std::cout << "--------------------------------\n";
 			std::cout << "states: " << traj.states << std::endl;
 			std::cout << "outputs: " << traj.outputs << std::endl;
-			std::cout << "action_probs: " << traj.f << std::endl;
 			std::cout << "actions:" << traj.actions << std::endl;
+			std::cout << "action_probs: " << traj.action_probs << std::endl;
 			std::cout << "prob_prods: " << prob_prods << std::endl;
 			std::cout << "rewards: " << traj.rewards << std::endl;
 			std::cout << "r: " << r << std::endl;		
 
-			assert(!torch::any(torch::isnan(g)).item<bool>());
+			assert(false);
 		}
 
-		// std::cout << "g: " << g << std::endl;
 		param.data() += g * learning_rate;
 	}
 }

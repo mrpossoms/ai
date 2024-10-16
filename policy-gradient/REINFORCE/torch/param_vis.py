@@ -42,7 +42,7 @@ def recompute(x, a, params):
 
 # Setup the figure and axis for the animation
 fig = plt.figure()
-ax = fig.add_subplot(1, 2, 1)
+ax = fig.add_subplot(1, 1, 1)
 
 # Initialize empty line objects for each parameter
 lines = {}
@@ -106,13 +106,13 @@ def on_slider_change(val):
 slider.on_changed(on_slider_change)
 on_slider_change(0)
 ax.legend()
+'''
 ax = fig.add_subplot(1, 2, 2)
-# '''
 for col_name in T:
     T[col_name] = np.array(T[col_name])
     ax.plot(T[col_name], label=col_name)
 ax.legend()
-# '''
+'''
 
 # Display the plot
 plt.show()
