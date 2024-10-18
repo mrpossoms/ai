@@ -2,7 +2,10 @@ import numpy as np
 from numpy import array as arr
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import warnings
 
+
+warnings.filterwarnings("error", category=DeprecationWarning)
 np.seterr(all='raise')
 
 class Environment:
@@ -95,8 +98,12 @@ def grad(W, s_t, a_t, pr_t, eps=0.001) -> np.array:
             d = np.zeros(W.shape)
             d[ri,ci] = eps
             pr = P(W + d, s_t)       
-            g[ri,ci] = (pr.flatten()[a_t] - pr_t.flatten()[a_t]) / eps
-                
+            try:
+                g[ri,ci] = (pr.flatten()[a_t] - pr_t.flatten()[a_t]) / eps
+            except:
+                import pdb; pdb.set_trace()
+                pass
+
     return g / pr_t.flatten()[a_t]
 
 def run(W, env, epochs=10, stochastic=True):
@@ -170,10 +177,6 @@ def train(env=Environment.Track(), policy_param_init=track_policy_init):
     print(W)
     vis(W, env, R=np.convolve(R, np.ones(200)/200, mode='valid'))
 
-if __name__ == '__main__':
-    train(Environment.Cart(), policy_param_init=cart_policy_init)
-
-
 def test_convergence():
     W = np.array([[0.1],[-0.1]])
     env = Environment.Track()
@@ -211,3 +214,20 @@ def test_gradient():
     # plt.xlabel("Time-step")
     # plt.ylabel("Probablity")
     # plt.show()
+
+if __name__ == '__main__':
+    def train_cart():
+        train(Environment.Cart(), policy_param_init=cart_policy_init)
+
+    funcs = {
+        'train_cart': train_cart,
+        'test_convergence': test_convergence,
+        'test_gradient': test_gradient,
+    }
+
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--function", type=str, default='train_cart', help="Function to run options: " + ', '.join(funcs.keys()))
+
+    args = parser.parse_args()
+    funcs[args.function]()

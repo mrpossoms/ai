@@ -199,10 +199,16 @@ void check_policy_optimization_continuous()
 		auto a = torch::zeros({1, policy.action_size()});
 		auto y0 = y[0][0].item<float>();
 		auto s0 = sigma[0].item<float>();
-		auto da = std::clamp(4 - y0, -s0, s0);
-		a[0][0] = y0+da;
-		if (policy.action_size() > 1)
-			a[0][1] = -0.2;
+
+		auto da0 = std::clamp(4 - y0, -s0, s0);
+		a[0][0] = y0 + da0;
+		if (policy.action_size() > 1) {
+			auto s1 = sigma[1].item<float>();
+			auto y1 = y[0][1].item<float>();
+			auto da1 = std::clamp(-4 - y1, -s1, s1);
+			a[0][1] = y1 + da1;			
+		}
+		
 		auto r = torch::ones({1});
 		auto pr = policy.action_probabilities(y, a);
 		auto mu = y.index({0, Slice(0, policy.action_size())});
@@ -211,7 +217,7 @@ void check_policy_optimization_continuous()
 		std::cout << "pr: " << pr[0][0].item<float>() << " mu: " << mu[0].item<float>() << " sig: " << sigmas[sigmas.size()-1] << std::endl;
 		traj.push_back({x, y, pr, a, 0, r});
 		plot_func_and_gradients(policy, i);
-		policy::Continuous::train(traj, policy, 0.1f);
+		policy::Continuous::train(traj, policy, 0.01f);
 
 		traj.clear();
 		std::cout << "======================" << std::endl;
