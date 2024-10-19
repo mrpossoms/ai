@@ -87,19 +87,34 @@ def P(W, s_t) -> np.array:
     return softmax(W @ s_t)
 
 def grad(W, s_t, a_t, pr_t, eps=0.001) -> np.array:
+    '''
+    Compute the gradient of the policy with respect to the parameters W using finite differencing
+    
+    Parameters:
+    W: np.array
+        The policy parameters
+    s_t: np.array
+        The input state at time t
+    a_t: int
+        The discrete action for which each parameter is differenced with respect to
+    pr_t: np.array
+        The probability of each action at time t as the output from the model
+    eps: float, default 0.001
+        The finite differencing step size applied to each parameter
+    '''
     g = np.zeros((W.shape[0], W.shape[1]))
     W_0 = W.copy()
 
-    log_pr_t = np.log(pr_t)
+    log_pr_t = np.log(pr_t).sum()
 
     # import pdb; pdb.set_trace()
     for ri in range(W.shape[0]):
         for ci in range(W.shape[1]):
             d = np.zeros(W.shape)
             d[ri,ci] = eps
-            pr = P(W + d, s_t)       
+            log_pr = np.log(P(W + d, s_t)).sum()      
             try:
-                g[ri,ci] = (pr.flatten()[a_t] - pr_t.flatten()[a_t]) / eps
+                g[ri,ci] = (log_pr_t - log_pr) / eps
             except:
                 import pdb; pdb.set_trace()
                 pass
@@ -186,14 +201,22 @@ def test_convergence():
     a0 = np.argmax(pr0).flatten()
     _,r0 = env.step(a0)
 
-    W += grad(W, env.state, a0, pr0) * r0
+    g = grad(W, env.state, a0, pr0)
+    print(f'g: {g}')
+    W += g * r0
 
+    env.state = env.make_state(-2)
     pr1 = P(W, env.state)
-    a1 = np.argmax(pr1).flatten()
-    _,r1 = env.step(a1)
-    a1 = np.argmax(pr1).flatten()
+    # a1 = np.argmax(pr1).flatten()
+    # _,r1 = env.step(a1)
 
-    assert(r1 > r0)
+    print(f'r0: {r0}')
+    print(f'pr0: {pr0.flatten()}, pr1: {pr1.flatten()}')
+    # assert(r1 > r0)
+    if r0 < 0:
+        assert(pr1[a0] <= pr0[a0])
+    else:
+        assert(pr1[a0] >= pr0[a0])
 
 def test_gradient():
     W = np.array([[0.1],[-0.1]])
