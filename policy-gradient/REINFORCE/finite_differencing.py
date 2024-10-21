@@ -1,92 +1,47 @@
 import numpy as np
 from numpy import array as arr
+from numpy import argmax
+from numpy.random import multinomial
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import warnings
+from env import *
 
 
 warnings.filterwarnings("error", category=DeprecationWarning)
 np.seterr(all='raise')
 
-class Environment:
-    class Track:
-        def __init__(self):
-            self.state = self.make_state()
+def Pi(W: [np.ndarray], s_t: np.ndarray) -> np.array:
+    assert(isinstance(W, list))
+    assert(isinstance(W[0], np.ndarray))
+    return softmax(W[0] @ s_t).flatten()
 
-        @property
-        def epochs(self) -> int:
-            return 6000
+def Tau(W: [np.ndarray], s_t: np.ndarray) -> np.ndarray:
+    assert(isinstance(W, list))
+    assert(isinstance(W[0], np.ndarray))
+    a = W[0] @ s_t
+    return a[:1], np.ln(np.exp(a[1:]))
 
-        @property
-        def state_action_size(self) -> tuple[int,int]:
-            return 1, 2
+def Pr_a_discrete(W: [np.ndarray], Pi: callable, s_t: np.ndarray, a_t: np.ndarray):
+    '''
+    The value that this function needs to compute is; how likley the choice of action a_t was
+    given the distribution parameters or action probabilities. For a discrete action space, passed through
+    a softmax function, the value at the action index can be used directly assuming the distribution is weighted
+    by these values
+    '''
+    return Pi(W, s_t).flatten()[int(a_t[0])]
 
-        def make_state(self, x=None, sigma=1):
-            if x is not None:
-                return np.array([[x]])
-            else:
-                return np.random.randn(1,1) * sigma
 
-        def step(self, action:int) -> tuple[np.array, float]:
-            s_t = self.state
-            if action == 0:
-                self.state = s_t + 0.05
-            else:
-                self.state = s_t - 0.05
+def Pr_a_gaussian(W: [np.ndarray], Pi: callable, s_t: np.ndarray, a_t: np.ndarray):
+    mu = sig_2
+    two_sig_sq = 2 * a_t[:2] ** 2
 
-            return self.state, s_t[0,0]**2 - self.state[0,0]**2
+    pr = (1 / np.sqrt(np.pi * two_sig_sq)) * np.exp(-((mu-a_t)**2)/two_sig_sq)
 
-    class Cart:
-        def __init__(self):
-            self.state = self.make_state()
+    return pr.prod()
 
-        @property
-        def epochs(self) -> int:
-            return 20_000
 
-        @property
-        def state_action_size(self) -> tuple[int,int]:
-            return 2, 2
-
-        def make_state(self, x=None, sigma=1):
-            if x is not None:
-                return np.array([[x], [0]])
-            else:
-                return np.random.randn(2,1) * sigma
-
-        def step(self, action:int) -> tuple[np.array, float]:
-            s_t = self.state
-            stm = np.array([
-                [1, 0.1],
-                [0,   1],
-            ])
-            self.state = stm @ s_t
-
-            if action == 0:
-                self.state[0,0] = s_t[0,0] + 0.05
-            else:
-                self.state[1,0] = s_t[1,0] - 0.05
-
-            return self.state, s_t[0,0]**2 - self.state[0,0]**2
-
-def track_policy_init() -> np.array:
-    return np.random.randn(2,1) * 0.1
-
-def cart_policy_init() -> np.array:
-    return np.random.randn(2,2) * 0.1
-
-def softmax(a) -> np.array:
-    try:
-       e_a = np.power(np.e, a)
-       return e_a / e_a.sum()
-    except FloatingPointError:
-        print(a)
-        import pdb; pdb.set_trace()
-
-def P(W, s_t) -> np.array:
-    return softmax(W @ s_t)
-
-def grad(W, s_t, a_t, pr_t, eps=0.001) -> np.array:
+def grad(W: [np.ndarray], s_t: np.ndarray, a_t: np.ndarray, Pi:callable, Pr_a:callable, eps=0.001) -> [np.ndarray]:
     '''
     Compute the gradient of the policy with respect to the parameters W using finite differencing
     
@@ -95,128 +50,84 @@ def grad(W, s_t, a_t, pr_t, eps=0.001) -> np.array:
         The policy parameters
     s_t: np.array
         The input state at time t
-    a_t: int
-        The discrete action for which each parameter is differenced with respect to
-    pr_t: np.array
-        The probability of each action at time t as the output from the model
+    a_t: np.array
+        The action chosen for time t
+    Pi: Callable
+        The policy function which calculates the probability or distribution parameters for all possible
+        actions that policy Pi could take
     eps: float, default 0.001
         The finite differencing step size applied to each parameter
     '''
-    g = np.zeros((W.shape[0], W.shape[1]))
-    W_0 = W.copy()
+    assert(isinstance(W, list))
+    assert(isinstance(W[0], np.ndarray))
+    assert(isinstance(s_t, np.ndarray))
+    assert(isinstance(a_t, np.ndarray))
 
-    log_pr_t = np.log(pr_t).sum()
+    G = [P * 0 for P in W]
+    pr_t = Pr_a(W, Pi, s_t, a_t)
 
-    # import pdb; pdb.set_trace()
-    for ri in range(W.shape[0]):
-        for ci in range(W.shape[1]):
-            d = np.zeros(W.shape)
-            d[ri,ci] = eps
-            log_pr = np.log(P(W + d, s_t)).sum()      
-            try:
-                g[ri,ci] = (log_pr_t - log_pr) / eps
-            except:
-                import pdb; pdb.set_trace()
-                pass
+    for i, (P, g) in enumerate(zip(W, G)):
+        for ri in range(P.shape[0]):
+            for ci in range(P.shape[1]):
+                d = np.zeros(P.shape)
+                d[ri,ci] = eps
+                P += d
+                # log_pr = np.log(Pi(W, s_t)).sum()
+                pr = Pr_a(W, Pi, s_t, a_t)
+                P -= d      
+                g[ri,ci] = (pr - pr_t) / eps    
 
-    return g / pr_t.flatten()[a_t]
+    return G
 
-def run(W, env, epochs=10, stochastic=True):
-    S,A,Pr,R = [],[],[],[]
-    for t in range(epochs):
-        Pr.append(P(W, env.state))
-        a = np.argmax(Pr[-1].flatten())
-        if stochastic:
-            a = np.random.choice(list(range(2)), p=Pr[-1].flatten())
-        S.append(env.state.copy());
-        s_t_1, r_t = env.step(a)
-        A.append(a); R.append(r_t)
-    return S,A,Pr,R
+def test_convergence_discrete():
+    W = [np.array([[0.1],[-0.1]])]
+    x0 = arr([-2])
 
-# ---- Sim stuff below ----
-def vis(W, env, R=[]):
-    fig = plt.figure()
+    pr_a_0 = Pi(W, x0)
 
-    def update(frame, S_t, plot):
-        plot[0].set_data([S_t[frame][0,0]], [0])
+    for i in range(3):
+        pr_a_t = Pi(W, x0)
+        a_t = arr([argmax(multinomial(1, pr_a_t))])
+        pr = Pr_a_discrete(W, Pi, x0, a_t)
+        r = -1 if a_t[0] == 0 else 1
 
-        return [plot]
+        g = grad(W, x0, a_t, Pi, Pr_a_discrete)
+        # print(f'g: {g}')
 
-    ax = fig.add_subplot(1, 2, 1)
-    ax.plot(R)
+        for Wi, gi in zip(W, g):
+            Wi += gi * r
 
-    # Show cart approaching from left
-    env.state = env.make_state(-2)
-    S_t,_,_,_ = run(W, env, epochs=200, stochastic=False)
-    ax = fig.add_subplot(2, 2, 2)
-    ax.set_xlim(-10, 10)
+        print(f'r: {r} pr: {pr.flatten()} probs: {pr_a_t}')
 
-    point_plt = ax.plot([S_t[0][0,0]], [0], color='r', marker='o', markersize=5)
-    ani1 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
+    pr_a_n = Pi(W, x0)
 
-    # show cart approaching from right
-    env.state = env.make_state(2)
-    S_t,_,_,_ = run(W, env, epochs=200, stochastic=False)
-    ax = fig.add_subplot(2, 2, 4)
-    ax.set_xlim(-10, 10)
+    assert(pr_a_n[1] > pr_a_0[1])
 
-    point_plt = ax.plot([S_t[0][0,0]], [0], color='r', marker='o', markersize=5)
-    ani2 = animation.FuncAnimation(fig, update, len(S_t), fargs=(S_t, point_plt), interval=50)
-    plt.show()
+def test_convergence_continuous():
+    W = [np.array([[0.1],[-0.1]])]
+    x0 = arr([-2])
 
-def train(env=Environment.Track(), policy_param_init=track_policy_init):
-    W = policy_param_init()
-    env.state = env.make_state(sigma=5)
-    print(W)
+    pr_a_0 = Tau(W, x0) # used for checking optimization below
 
-    vis(W, env)
-    a = 0.0001
+    for i in range(3):
+        pr_a_t = Tau(W, x0)
 
-    R = []
-    for e in range(env.epochs):
-        # S = S_0.copy()
-        env.state = env.make_state(sigma=5)
-        g, t, r_e = W * 0, 0, 0
-        S_e,A_e,Pr_e,R_e = run(W, env, epochs=50, stochastic=True)
-        for s_t, a_t, pr_t, r_t in zip(S_e, A_e, Pr_e, R_e):
-            r_e += r_t * 0.999**t
-            g += grad(W, s_t, a_t, pr_t) * (r_t * 0.999**t)
-            t += 1
-        g /= len(A_e)
-        W += g * a
+        a_t = arr(np.random.normal(pr_a_t[0], pr_a_t[1]))
 
-        R.append(r_e)
-        if e % 1000 == 0:
-            print(f"{e}/{env.epochs} Epoch: {e}, Reward: {np.mean(R[-1000:])}")
+        pr_0 = Pr_a_gaussian(W, Tau, x0, a_t)
+        
 
-    print(W)
-    vis(W, env, R=np.convolve(R, np.ones(200)/200, mode='valid'))
+        g = grad(W, x0, a_t, Tau, Pr_a_discrete)
+        # print(f'g: {g}')
 
-def test_convergence():
-    W = np.array([[0.1],[-0.1]])
-    env = Environment.Track()
-    env.state = env.make_state(-2)
+        for Wi, gi in zip(W, g):
+            Wi += gi * r
 
-    pr0 = P(W, env.state)
-    a0 = np.argmax(pr0).flatten()
-    _,r0 = env.step(a0)
+        print(f'r: {r} pr: {pr.flatten()} probs: {pr_a_t}')
 
-    g = grad(W, env.state, a0, pr0)
-    print(f'g: {g}')
-    W += g * r0
+    pr_a_n = Tau(W, x0)
 
-    env.state = env.make_state(-2)
-    pr1 = P(W, env.state)
-    # a1 = np.argmax(pr1).flatten()
-    # _,r1 = env.step(a1)
-
-    print(f'r0: {r0}')
-    print(f'pr0: {pr0.flatten()}, pr1: {pr1.flatten()}')
-    # assert(r1 > r0)
-    if r0 < 0:
-        assert(pr1[a0] <= pr0[a0])
-    else:
-        assert(pr1[a0] >= pr0[a0])
+    assert(pr_a_n[1] > pr_a_0[1])
 
 def test_gradient():
     W = np.array([[0.1],[-0.1]])
@@ -225,7 +136,7 @@ def test_gradient():
     for i in range(100):
         pr = P(W, S_0)
         Pr.append(pr)
-        g = grad(W, S_0, 0, pr) * 0.005
+        g = grad([W], S_0) * 0.005
         W += g * 0.01
     Pr = np.array(Pr)
 
@@ -244,7 +155,7 @@ if __name__ == '__main__':
 
     funcs = {
         'train_cart': train_cart,
-        'test_convergence': test_convergence,
+        'test_convergence_discrete': test_convergence_discrete,
         'test_gradient': test_gradient,
     }
 
