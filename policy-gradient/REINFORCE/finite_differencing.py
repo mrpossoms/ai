@@ -39,7 +39,8 @@ def Pr_a_gaussian(W: [np.ndarray], Pi: callable, s_t: np.ndarray, a_t: np.ndarra
     pr_a_t = Pi(W, s_t)
     mu = pr_a_t[:1]
     # import pdb; pdb.set_trace()
-    var = np.clip(pr_a_t[1:], 0.4, 1000) ** 2
+    # var = np.clip(pr_a_t[1:], 0.4, 1000) ** 2
+    var = (pr_a_t[1:] + 0.2) ** 2
     two_var = 2 * var
 
     # mu_density = (1 / np.sqrt(np.pi * two_sig_sq))
@@ -86,7 +87,7 @@ def grad(W: [np.ndarray], s_t: np.ndarray, a_t: np.ndarray, Pi:callable, Pr_a:ca
 
     return G
 
-def test_convergence_discrete():
+def test_convergence_discrete(args):
     W = [np.array([[0.1],[-0.1]])]
     x0 = arr([-2])
 
@@ -110,7 +111,7 @@ def test_convergence_discrete():
 
     assert(pr_a_n[1] > pr_a_0[1])
 
-def test_convergence_continuous():
+def test_convergence_continuous(args):
     W = [np.array([[0.1],[-0.1]])]
     x0 = arr([-2])
 
@@ -118,7 +119,7 @@ def test_convergence_continuous():
     pr_a_0 = Pr_a_gaussian(W, Tau, x0, target_output)#Tau(W, x0) # used for checking optimization below
     A = []
 
-    for i in range(40):
+    for i in range(args.epochs):
         pr_a_t = Tau(W, x0)
         a_t = np.random.normal(pr_a_t[:1], pr_a_t[1:])
 
@@ -140,14 +141,14 @@ def test_convergence_continuous():
 
     assert(pr_a_n > pr_a_0)
 
-def test_optimization_continuous():
+def test_optimization_continuous(args):
     W = [np.array([[0.1],[-0.1]])]
     x0 = arr([-2])
 
     target_output = 2
     pr_a_0 = Pr_a_gaussian(W, Tau, x0, target_output)#Tau(W, x0) # used for checking optimization below
 
-    for i in range(40):
+    for i in range(args.epochs):
         pr_a_t = Tau(W, x0)
         a_t = pr_a_t[:1] + np.clip(target_output - pr_a_t[:1], -pr_a_t[1:], pr_a_t[1:])
 
@@ -163,7 +164,7 @@ def test_optimization_continuous():
 
     assert(pr_a_n > pr_a_0)
 
-def test_gradient():
+def test_gradient(args):
     W = np.array([[0.1],[-0.1]])
     S_0 = np.array([[-2]]) #np.random.random((1,1))
     Pr = []
@@ -198,6 +199,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--function", type=str, default='train_cart', help="Function to run options: " + ', '.join(funcs.keys()))
+    parser.add_argument("--epochs", type=int, default=10, help="Number of epochs to run")
 
     args = parser.parse_args()
-    funcs[args.function]()
+    funcs[args.function](args)
