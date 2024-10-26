@@ -20,7 +20,7 @@ def Tau(W: [np.ndarray], s_t: np.ndarray) -> np.ndarray:
     assert(isinstance(W, list))
     assert(isinstance(W[0], np.ndarray))
     a = W[0] @ s_t
-    return arr([a[:1], np.log(np.exp(a[1:]) + 1)]).flatten()
+    return arr([a[:1], np.log(np.exp(a[1:]) + 1) + 0.2]).flatten()
 
 def Pr_a_discrete(W: [np.ndarray], Pi: callable, s_t: np.ndarray, a_t: np.ndarray):
     '''
@@ -40,7 +40,7 @@ def Pr_a_gaussian(W: [np.ndarray], Pi: callable, s_t: np.ndarray, a_t: np.ndarra
     mu = pr_a_t[:1]
     # import pdb; pdb.set_trace()
     # var = np.clip(pr_a_t[1:], 0.4, 1000) ** 2
-    var = (pr_a_t[1:] + 0.2) ** 2
+    var = pr_a_t[1:] ** 2
     two_var = 2 * var
 
     # mu_density = (1 / np.sqrt(np.pi * two_sig_sq))

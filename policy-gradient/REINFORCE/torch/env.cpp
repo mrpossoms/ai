@@ -182,10 +182,8 @@ float Environment::step_reward(float u[2])
 	assert(!std::isnan(u[1]));
 
 	// clamp u
-	float u0 = std::max(-0.1f, std::min(0.1f, u[0] * 0.1f));
-	float u1 = std::max(-0.1f, std::min(0.1f, u[1] * 0.1f));
-
-
+	float u0 = std::max(-0.1f, std::min(0.1f, u[0]/10.f));
+	float u1 = std::max(-0.1f, std::min(0.1f, u[1]/10.f));
 
 	state.vel[0] += u0;
 	state.vel[1] += u1;

@@ -14,6 +14,8 @@ using Policy = policy::Continuous;
 std::shared_ptr<trajectory::Trajectory> traj;
 std::shared_ptr<Policy> P;
 
+const unsigned TRAJ_SIZE = 256;
+
 int playing()
 {
 	// return 0 when the game loop should terminate
@@ -32,7 +34,7 @@ void update()
 	if (policy_loaded)
 	{
 		TG_TIMEOUT = 10000;
-		if (env.distance_to_goal() < 2 || traj->size() >= 64)
+		if (env.distance_to_goal() < 2 || traj->size() >= TRAJ_SIZE)
 		{
 			env.spawn(env.state.goal);
 			traj->clear();
@@ -40,7 +42,7 @@ void update()
 	}
 	else
 	{
-		if (traj->size() >= 64)
+		if (traj->size() >= TRAJ_SIZE)
 		{
 			rewards += traj->R();
 
@@ -57,7 +59,7 @@ void update()
 			}
 
 			// policy::train_policy_gradient(traj, policy::hyper_parameters{(unsigned)traj->size(), 0, 0.001});
-			P->train(*traj, 0.01f);
+			P->train(*traj, 0.001f);
 			episode++;
 
 			env.reset();
@@ -72,7 +74,7 @@ int main(int argc, char* argv[])
 	torch::manual_seed(0);
 	// policy::init(4, 4);
 	P = std::make_shared<Policy>();
-	traj = std::make_shared<trajectory::Trajectory>(64, P->observation_size(), P->action_size(), P->output_size());
+	traj = std::make_shared<trajectory::Trajectory>(TRAJ_SIZE, P->observation_size(), P->action_size(), P->output_size());
 
 	try
 	{
@@ -92,9 +94,8 @@ int main(int argc, char* argv[])
 		update();
 	
 		// if (policy::loaded())
-		if (episode % 1000 == 0 && i > 1000)
+		if (episode % 1000 == 0 && i > 1000 || policy_loaded)
 		{
-
 			env.render();		
 		}
 		i++;

@@ -55,7 +55,7 @@ struct Trajectory
 		};
 	}
 
-	void push_back(const Frame& frame)
+	void push_back(const Frame& frame, float gamma=0.999f)
 	{
 		if (_size < _capacity)
 		{
@@ -67,7 +67,7 @@ struct Trajectory
 			outputs[_size] = frame.output.flatten();
 			action_probs[_size] = frame.action_probs.flatten();
 			actions[_size] = frame.action.flatten();
-			rewards[_size] = frame.reward;
+			rewards[_size] = frame.reward * powf(gamma, _size);
 			_size++;
 		}
 	}
@@ -151,7 +151,7 @@ namespace policy
 		virtual long observation_size() override { return 4; }
 
 	private:
-		torch::nn::Linear l0 = nullptr, l1 = nullptr, l2 = nullptr;
+		torch::nn::Linear l0 = nullptr; //,l1 = nullptr, l2 = nullptr, l3 = nullptr;
 	};
 
 	torch::Tensor gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var);
