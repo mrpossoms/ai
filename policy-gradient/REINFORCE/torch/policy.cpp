@@ -113,8 +113,10 @@ torch::Tensor policy::Continuous::tensor_from_state(Environment& env)
 
 torch::Tensor policy::Continuous::action_sigma(const torch::Tensor& a_dist_params)
 {
-	return torch::ones({2}) * 0.1f;
-	return torch::clamp(torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1), 0.2, 0.4);
+	// return torch::ones({2}) * 0.1f;
+	return torch::log(torch::abs(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1.f) + 0.05f;
+	return torch::clamp(torch::abs(a_dist_params.index({0, Slice(action_size(), output_size())})), 0.05, 0.2);
+	return torch::clamp(torch::log(torch::exp(a_dist_params.index({0, Slice(action_size(), output_size())})) + 1) + 0.1, 0.1, 0.1);
 }
 
 // torch::Tensor policy::gaussian(const torch::Tensor& x, const torch::Tensor& mu, const torch::Tensor& var)

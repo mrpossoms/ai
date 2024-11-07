@@ -46,7 +46,7 @@ void update()
 		{
 			rewards += traj->R();
 
-			if (episode % 100 == 0)
+			if (episode % 100 == 0 && episode > 0)
 			{
 				std::cout << rewards / 1000.f << " ========================" << std::endl;
 				rewards = 0;
